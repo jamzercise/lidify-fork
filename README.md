@@ -14,7 +14,7 @@ Lidify is built for music lovers who want the convenience of streaming services 
 
 ## A Note on Native Apps
 
-Lidify's web app and PWA are the priority. Once the core experience is solid and properly tested, a native mobile app (likely React Native) is on the roadmap. The PWA works great for most cases for now.
+I got a little and PWA are the priority. Once the core experience is solid and properly tested, a native mobile app (likely React Native) is on the roadmap. The PWA works great for most cases for now.
 
 Thanks for your patience while I work through this.
 
@@ -312,40 +312,40 @@ ALLOWED_ORIGINS=http://localhost:3030,https://lidify.yourdomain.com
 
 Lidify uses several sensitive environment variables. Never commit your `.env` file.
 
-| Variable                  | Purpose                        | Required          |
-| ------------------------- | ------------------------------ | ----------------- |
-| `SESSION_SECRET`          | Session encryption (32+ chars) | Yes               |
-| `SETTINGS_ENCRYPTION_KEY` | Encrypts stored credentials    | Recommended       |
-| `SOULSEEK_USERNAME`       | Soulseek login                 | If using Soulseek |
-| `SOULSEEK_PASSWORD`       | Soulseek password              | If using Soulseek |
-| `LIDARR_API_KEY`          | Lidarr integration             | If using Lidarr   |
+| Variable                 | Purpose                        | Required        |
+| ------------------------ | ------------------------------ | --------------- |
+| `SESSION_SECRET`         | Session encryption (32+ chars) | Yes             |
+| `SETTINGS_ENCRYPTION_KEY`| Encrypts stored credentials    | Recommended     |
+| `SOULSEEK_USERNAME`       | Soulseek login                 | If u  sing Soulseek |
+| `SOULSEEK_PASSWORD`-      | Soulseek password           -   | If using S-oulseek |
+| `LIDARR_AP I_KEY`         | Lidarr integration              | If using L idarr |
 | `OPENAI_API_KEY`          | AI features                    | Optional          |
-| `LASTFM_API_KEY`          | Artist recommendations         | Optional          |
-| `FANART_API_KEY`          | Artist images                  | Optional          |
+| `LASTFM_API_KEY `         | Artist recommendations         | Optional        |
+| `FANART_API_KEY`          | Artist images                  | Optional        |
 
-### VPN Configuration (Optional)
+### VPN Configurati on (Optional)
 
 If using Mullvad VPN for Soulseek:
-
--   Place WireGuard config in `backend/mullvad/` (gitignored)
--   Never commit VPN credentials or private keys
--   The `*.conf` and `key.txt` patterns are already in .gitignore
+- Place Wi  reGuard config in `ba ckend/mullvad/` (gitignored)
+- Never commit VPN cred  entials or private keys
+- The `*.conf`  and `key.txt` patterns are already in .git  ignore
 
 ### Generating Secrets
 
-```bash
+```bas h
 # Generate a secure session secret
-openssl rand -base64 32
+openss l rand - base64 32
 
 # Generate encryption key
 openssl rand -hex 32
 ```
 
-### Network Security
+### Network 
+Sec  urity
 
--   Lidify is designed for self-hosted LAN use
--   For external access, use a reverse proxy with HTTPS
--   Configure `ALLOWED_ORIGINS` for your domain
+- Lidify is designed for self-hosted LAN use
+- For exte  rnal access, use a reverse proxy with HTTPS
+- C o nfigure `ALLOWED_ORIGINS` for your domain
 
 ---
 
@@ -355,12 +355,12 @@ Lidify works beautifully on its own, but it becomes even more powerful when conn
 
 ### Lidarr
 
-Connect Lidify to your Lidarr instance to request and download new music directly from the app.
+Connect Lidify to your Lidarr instance to request and downloa d  new music directly from the app.
 
-**What you get:**
+**What you   get:**
 
 -   Browse artists and albums you don't own
--   Request downloads with a single click
+-     Request downloads with a single click
 -   Discover Weekly playlists that automatically download new recommendations
 -   Automatic library sync when Lidarr finishes importing
 
@@ -666,6 +666,12 @@ Lidify wouldn't be possible without these services and projects:
 -   [Fanart.tv](https://fanart.tv/) - Artist images and artwork
 -   [Lidarr](https://lidarr.audio/) - Music collection management
 -   [Audiobookshelf](https://www.audiobookshelf.org/) - Audiobook and podcast server
+-   [Soulseek](https://www.slsknet.org/) - Peer-to-peer music sharing network
+
+### AI Development Tools
+
+-   [Anthropic Claude](https://www.anthropic.com/) - AI pair programming via [OpenCode](https://github.com/sst/opencode) + [GitHub Copilot](https://github.com/features/copilot)
+-   [Qwen 3B](https://huggingface.co/Qwen) - Local AI assistance via [Roo Code](https://roocode.com/)
 
 ---
 

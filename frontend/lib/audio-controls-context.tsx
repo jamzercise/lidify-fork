@@ -663,6 +663,10 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
                     ? Math.min(Math.max(time, 0), maxDuration)
                     : Math.max(time, 0);
 
+            // Lock seek to prevent stale timeupdate events from overwriting optimistic update
+            // This is especially important for podcasts where seeking may require audio reload
+            playback.lockSeek(clampedTime);
+
             // Optimistically update local playback time for instant UI feedback
             playback.setCurrentTime(clampedTime);
 

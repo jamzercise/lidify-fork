@@ -1,11 +1,11 @@
 /**
  * Unified Enrichment Worker
- * 
+ *
  * Handles ALL enrichment in one place:
  * - Artist metadata (Last.fm, MusicBrainz)
  * - Track mood tags (Last.fm)
  * - Audio analysis (triggers Essentia via Redis queue)
- * 
+ *
  * Two modes:
  * 1. FULL: Re-enriches everything regardless of status (Settings > Enrich)
  * 2. INCREMENTAL: Only new material and incomplete items (Sync)
@@ -29,27 +29,75 @@ let redis: Redis | null = null;
 // Mood tags to extract from Last.fm
 const MOOD_TAGS = new Set([
     // Energy/Activity
-    "chill", "relax", "relaxing", "calm", "peaceful", "ambient",
-    "energetic", "upbeat", "hype", "party", "dance",
-    "workout", "gym", "running", "exercise", "motivation",
+    "chill",
+    "relax",
+    "relaxing",
+    "calm",
+    "peaceful",
+    "ambient",
+    "energetic",
+    "upbeat",
+    "hype",
+    "party",
+    "dance",
+    "workout",
+    "gym",
+    "running",
+    "exercise",
+    "motivation",
     // Emotions
-    "sad", "melancholy", "melancholic", "depressing", "heartbreak",
-    "happy", "feel good", "feel-good", "joyful", "uplifting",
-    "angry", "aggressive", "intense",
-    "romantic", "love", "sensual",
+    "sad",
+    "melancholy",
+    "melancholic",
+    "depressing",
+    "heartbreak",
+    "happy",
+    "feel good",
+    "feel-good",
+    "joyful",
+    "uplifting",
+    "angry",
+    "aggressive",
+    "intense",
+    "romantic",
+    "love",
+    "sensual",
     // Time/Setting
-    "night", "late night", "evening", "morning",
-    "summer", "winter", "rainy", "sunny",
-    "driving", "road trip", "travel",
+    "night",
+    "late night",
+    "evening",
+    "morning",
+    "summer",
+    "winter",
+    "rainy",
+    "sunny",
+    "driving",
+    "road trip",
+    "travel",
     // Activity
-    "study", "focus", "concentration", "work",
-    "sleep", "sleeping", "bedtime",
+    "study",
+    "focus",
+    "concentration",
+    "work",
+    "sleep",
+    "sleeping",
+    "bedtime",
     // Vibe
-    "dreamy", "atmospheric", "ethereal", "spacey",
-    "groovy", "funky", "smooth",
-    "dark", "moody", "brooding",
-    "epic", "cinematic", "dramatic",
-    "nostalgic", "throwback",
+    "dreamy",
+    "atmospheric",
+    "ethereal",
+    "spacey",
+    "groovy",
+    "funky",
+    "smooth",
+    "dark",
+    "moody",
+    "brooding",
+    "epic",
+    "cinematic",
+    "dramatic",
+    "nostalgic",
+    "throwback",
 ]);
 
 /**
@@ -57,8 +105,8 @@ const MOOD_TAGS = new Set([
  */
 function filterMoodTags(tags: string[]): string[] {
     return tags
-        .map(t => t.toLowerCase().trim())
-        .filter(t => {
+        .map((t) => t.toLowerCase().trim())
+        .filter((t) => {
             if (MOOD_TAGS.has(t)) return true;
             for (const mood of MOOD_TAGS) {
                 if (t.includes(mood) || mood.includes(t)) return true;
@@ -122,36 +170,36 @@ export async function runFullEnrichment(): Promise<{
     audioQueued: number;
 }> {
     console.log("\n=== FULL ENRICHMENT: Re-enriching everything ===\n");
-    
+
     // Reset all statuses to pending
     await prisma.artist.updateMany({
-        data: { enrichmentStatus: "pending" }
+        data: { enrichmentStatus: "pending" },
     });
-    
+
     await prisma.track.updateMany({
-        data: { 
+        data: {
             lastfmTags: [],
-            analysisStatus: "pending"
-        }
+            analysisStatus: "pending",
+        },
     });
-    
+
     // Now run the enrichment cycle
     const result = await runEnrichmentCycle(true);
-    
+
     return result;
 }
 
 /**
  * Main enrichment cycle
- * 
+ *
  * Flow:
  * 1. Artist metadata (Last.fm/MusicBrainz) - blocking, required for track enrichment
  * 2. Track tags (Last.fm mood tags) - blocking, quick API calls
  * 3. Audio analysis (Essentia) - NON-BLOCKING, queued to Redis for background processing
- * 
+ *
  * Steps 1 & 2 must complete before enrichment is "done".
  * Step 3 runs entirely in background via the audio-analyzer Docker container.
- * 
+ *
  * @param fullMode - If true, processes everything. If false, only pending items.
  */
 async function runEnrichmentCycle(fullMode: boolean): Promise<{
@@ -171,25 +219,30 @@ async function runEnrichmentCycle(fullMode: boolean): Promise<{
     try {
         // Step 1: Enrich artists (blocking - required for step 2)
         artistsProcessed = await enrichArtistsBatch();
-        
+
         // Step 2: Enrich track tags from Last.fm (blocking - quick API calls)
         tracksProcessed = await enrichTrackTagsBatch();
-        
+
         // Step 3: Queue audio analysis (NON-BLOCKING)
         // Just adds to Redis queue - actual processing happens in audio-analyzer container
         // This is intentionally fire-and-forget so it doesn't slow down enrichment
         audioQueued = await queueAudioAnalysis();
-        
+
         // Log progress (only if work was done)
         if (artistsProcessed > 0 || tracksProcessed > 0 || audioQueued > 0) {
             const progress = await getEnrichmentProgress();
             console.log(`\n[Enrichment Progress]`);
-            console.log(`   Artists: ${progress.artists.completed}/${progress.artists.total} (${progress.artists.progress}%)`);
-            console.log(`   Track Tags: ${progress.trackTags.enriched}/${progress.trackTags.total} (${progress.trackTags.progress}%)`);
-            console.log(`   Audio Analysis: ${progress.audioAnalysis.completed}/${progress.audioAnalysis.total} (${progress.audioAnalysis.progress}%) [background]`);
+            console.log(
+                `   Artists: ${progress.artists.completed}/${progress.artists.total} (${progress.artists.progress}%)`
+            );
+            console.log(
+                `   Track Tags: ${progress.trackTags.enriched}/${progress.trackTags.total} (${progress.trackTags.progress}%)`
+            );
+            console.log(
+                `   Audio Analysis: ${progress.audioAnalysis.completed}/${progress.audioAnalysis.total} (${progress.audioAnalysis.progress}%) [background]`
+            );
             console.log("");
         }
-        
     } catch (error) {
         console.error("[Enrichment] Cycle error:", error);
     } finally {
@@ -240,9 +293,13 @@ async function enrichArtistsBatch(): Promise<number> {
 async function enrichTrackTagsBatch(): Promise<number> {
     // Note: Nested orderBy on relations doesn't work with isEmpty filtering in Prisma
     // Track tag enrichment doesn't depend on artist enrichment status, so we just order by recency
+    // Match both empty array AND null (newly scanned tracks have null, not [])
     const tracks = await prisma.track.findMany({
         where: {
-            lastfmTags: { equals: [] },
+            OR: [
+                { lastfmTags: { equals: [] } },
+                { lastfmTags: { isEmpty: true } },
+            ],
         },
         include: {
             album: {
@@ -262,21 +319,29 @@ async function enrichTrackTagsBatch(): Promise<number> {
     for (const track of tracks) {
         try {
             const artistName = track.album.artist.name;
-            const trackInfo = await lastFmService.getTrackInfo(artistName, track.title);
-            
+            const trackInfo = await lastFmService.getTrackInfo(
+                artistName,
+                track.title
+            );
+
             if (trackInfo?.toptags?.tag) {
                 const allTags = trackInfo.toptags.tag.map((t: any) => t.name);
                 const moodTags = filterMoodTags(allTags);
-                
+
                 await prisma.track.update({
                     where: { id: track.id },
-                    data: { 
-                        lastfmTags: moodTags.length > 0 ? moodTags : ["_no_mood_tags"] 
+                    data: {
+                        lastfmTags:
+                            moodTags.length > 0 ? moodTags : ["_no_mood_tags"],
                     },
                 });
-                
+
                 if (moodTags.length > 0) {
-                    console.log(`   ✓ ${track.title}: [${moodTags.slice(0, 3).join(", ")}...]`);
+                    console.log(
+                        `   ✓ ${track.title}: [${moodTags
+                            .slice(0, 3)
+                            .join(", ")}...]`
+                    );
                 }
             } else {
                 await prisma.track.update({
@@ -284,9 +349,9 @@ async function enrichTrackTagsBatch(): Promise<number> {
                     data: { lastfmTags: ["_not_found"] },
                 });
             }
-            
+
             // Rate limit
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise((resolve) => setTimeout(resolve, 200));
         } catch (error: any) {
             console.error(`   ✗ ${track.title}: ${error?.message || error}`);
         }
@@ -316,7 +381,9 @@ async function queueAudioAnalysis(): Promise<number> {
 
     if (tracks.length === 0) return 0;
 
-    console.log(`[Audio Analysis] Queueing ${tracks.length} tracks for Essentia...`);
+    console.log(
+        `[Audio Analysis] Queueing ${tracks.length} tracks for Essentia...`
+    );
 
     const redis = getRedis();
     let queued = 0;
@@ -331,13 +398,13 @@ async function queueAudioAnalysis(): Promise<number> {
                     filePath: track.filePath,
                 })
             );
-            
+
             // Mark as queued (processing)
             await prisma.track.update({
                 where: { id: track.id },
                 data: { analysisStatus: "processing" },
             });
-            
+
             queued++;
         } catch (error) {
             console.error(`   Failed to queue ${track.title}:`, error);
@@ -353,7 +420,7 @@ async function queueAudioAnalysis(): Promise<number> {
 
 /**
  * Get comprehensive enrichment progress
- * 
+ *
  * Returns separate progress for:
  * - Artists & Track Tags: "Core" enrichment (must complete before app is fully usable)
  * - Audio Analysis: "Background" enrichment (runs in separate container, non-blocking)
@@ -364,17 +431,20 @@ export async function getEnrichmentProgress() {
         by: ["enrichmentStatus"],
         _count: true,
     });
-    
+
     const artistTotal = artistCounts.reduce((sum, s) => sum + s._count, 0);
-    const artistCompleted = artistCounts.find(s => s.enrichmentStatus === "completed")?._count || 0;
-    const artistPending = artistCounts.find(s => s.enrichmentStatus === "pending")?._count || 0;
-    
+    const artistCompleted =
+        artistCounts.find((s) => s.enrichmentStatus === "completed")?._count ||
+        0;
+    const artistPending =
+        artistCounts.find((s) => s.enrichmentStatus === "pending")?._count || 0;
+
     // Track tag progress
     const trackTotal = await prisma.track.count();
     const trackTagsEnriched = await prisma.track.count({
         where: { NOT: { lastfmTags: { equals: [] } } },
     });
-    
+
     // Audio analysis progress (background task)
     const audioCompleted = await prisma.track.count({
         where: { analysisStatus: "completed" },
@@ -391,24 +461,33 @@ export async function getEnrichmentProgress() {
 
     // Core enrichment is complete when artists and track tags are done
     // Audio analysis is separate - it runs in background and doesn't block
-    const coreComplete = artistPending === 0 && (trackTotal - trackTagsEnriched) === 0;
-    
+    const coreComplete =
+        artistPending === 0 && trackTotal - trackTagsEnriched === 0;
+
     return {
         // Core enrichment (blocking)
         artists: {
             total: artistTotal,
             completed: artistCompleted,
             pending: artistPending,
-            failed: artistCounts.find(s => s.enrichmentStatus === "failed")?._count || 0,
-            progress: artistTotal > 0 ? Math.round((artistCompleted / artistTotal) * 100) : 0,
+            failed:
+                artistCounts.find((s) => s.enrichmentStatus === "failed")
+                    ?._count || 0,
+            progress:
+                artistTotal > 0
+                    ? Math.round((artistCompleted / artistTotal) * 100)
+                    : 0,
         },
         trackTags: {
             total: trackTotal,
             enriched: trackTagsEnriched,
             pending: trackTotal - trackTagsEnriched,
-            progress: trackTotal > 0 ? Math.round((trackTagsEnriched / trackTotal) * 100) : 0,
+            progress:
+                trackTotal > 0
+                    ? Math.round((trackTagsEnriched / trackTotal) * 100)
+                    : 0,
         },
-        
+
         // Background enrichment (non-blocking, runs in audio-analyzer container)
         audioAnalysis: {
             total: trackTotal,
@@ -416,13 +495,17 @@ export async function getEnrichmentProgress() {
             pending: audioPending,
             processing: audioProcessing,
             failed: audioFailed,
-            progress: trackTotal > 0 ? Math.round((audioCompleted / trackTotal) * 100) : 0,
+            progress:
+                trackTotal > 0
+                    ? Math.round((audioCompleted / trackTotal) * 100)
+                    : 0,
             isBackground: true, // Flag to indicate this runs separately
         },
-        
+
         // Overall status
         coreComplete, // True when artists + track tags are done
-        isFullyComplete: coreComplete && audioPending === 0 && audioProcessing === 0,
+        isFullyComplete:
+            coreComplete && audioPending === 0 && audioProcessing === 0,
     };
 }
 
@@ -433,9 +516,9 @@ export async function enrichArtistNow(artistId: string) {
     const artist = await prisma.artist.findUnique({
         where: { id: artistId },
     });
-    
+
     if (!artist) return;
-    
+
     console.log(`[Enrichment] Enriching artist: ${artist.name}`);
     await enrichSimilarArtist(artist);
 }
@@ -468,33 +551,35 @@ export async function enrichAlbumTracksNow(albumId: string) {
             },
         },
     });
-    
-    console.log(`[Enrichment] Enriching ${tracks.length} tracks for album ${albumId}`);
-    
+
+    console.log(
+        `[Enrichment] Enriching ${tracks.length} tracks for album ${albumId}`
+    );
+
     for (const track of tracks) {
         try {
             const trackInfo = await lastFmService.getTrackInfo(
                 track.album.artist.name,
                 track.title
             );
-            
+
             if (trackInfo?.toptags?.tag) {
                 const allTags = trackInfo.toptags.tag.map((t: any) => t.name);
                 const moodTags = filterMoodTags(allTags);
-                
+
                 await prisma.track.update({
                     where: { id: track.id },
-                    data: { 
-                        lastfmTags: moodTags.length > 0 ? moodTags : ["_no_mood_tags"],
+                    data: {
+                        lastfmTags:
+                            moodTags.length > 0 ? moodTags : ["_no_mood_tags"],
                         analysisStatus: "pending", // Queue for audio analysis
                     },
                 });
             }
-            
-            await new Promise(resolve => setTimeout(resolve, 200));
+
+            await new Promise((resolve) => setTimeout(resolve, 200));
         } catch (error) {
             console.error(`Failed to enrich track ${track.title}:`, error);
         }
     }
 }
-

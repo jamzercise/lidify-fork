@@ -90,7 +90,6 @@ router.use((req, res, next) => {
  */
 router.post("/scan", async (req, res) => {
     try {
-
         if (!config.music.musicPath) {
             return res.status(500).json({
                 error: "Music path not configured. Please set MUSIC_PATH environment variable.",
@@ -100,7 +99,9 @@ router.post("/scan", async (req, res) => {
         // First, organize any SLSKD downloads from Docker container to music library
         // This ensures files are moved before the scan finds them
         try {
-            const { organizeSingles } = await import("../workers/organizeSingles");
+            const { organizeSingles } = await import(
+                "../workers/organizeSingles"
+            );
             console.log("[Scan] Organizing SLSKD downloads before scan...");
             await organizeSingles();
             console.log("[Scan] SLSKD organization complete");
@@ -155,7 +156,6 @@ router.get("/scan/status/:jobId", async (req, res) => {
 // POST /library/organize - Manually trigger organization script
 router.post("/organize", async (req, res) => {
     try {
-
         // Run in background
         organizeSingles().catch((err) => {
             console.error("Manual organization failed:", err);
@@ -526,7 +526,7 @@ router.get("/recently-added", async (req, res) => {
         // Get the 20 most recently added LIBRARY albums (by lastSynced timestamp)
         // This limits "Recently Added" to actual recent additions, not the entire library
         const recentAlbums = await prisma.album.findMany({
-            where: { 
+            where: {
                 location: "LIBRARY",
                 tracks: { some: {} }, // Only albums with actual tracks
             },
@@ -754,14 +754,21 @@ router.get("/artists", async (req, res) => {
 
         if (query) {
             if (where.AND) {
-                where.AND.push({ name: { contains: query as string, mode: "insensitive" } });
+                where.AND.push({
+                    name: { contains: query as string, mode: "insensitive" },
+                });
             } else {
                 where.name = { contains: query as string, mode: "insensitive" };
             }
         }
 
         // Determine which album location to count based on filter
-        const albumLocationFilter = filter === "discovery" ? "DISCOVER" : filter === "all" ? undefined : "LIBRARY";
+        const albumLocationFilter =
+            filter === "discovery"
+                ? "DISCOVER"
+                : filter === "all"
+                ? undefined
+                : "LIBRARY";
 
         const [artistsWithAlbums, total] = await Promise.all([
             prisma.artist.findMany({
@@ -776,7 +783,9 @@ router.get("/artists", async (req, res) => {
                     heroUrl: true,
                     albums: {
                         where: {
-                            ...(albumLocationFilter ? { location: albumLocationFilter } : {}),
+                            ...(albumLocationFilter
+                                ? { location: albumLocationFilter }
+                                : {}),
                             tracks: { some: {} },
                         },
                         select: {
@@ -887,14 +896,27 @@ router.get("/enrichment-diagnostics", async (req, res) => {
             problemArtists,
             failedArtists,
             suggestions: [
-                completedNoImage > 0 ? `${completedNoImage} artists completed enrichment but have no image - external APIs may be failing or rate limited` : null,
-                tempMbidCount > 0 ? `${tempMbidCount} artists have temp MBIDs - Fanart.tv won't work for them, relies on Deezer/Last.fm` : null,
-                statusCounts.find(s => s.enrichmentStatus === "pending")?._count ? "Enrichment still in progress - check logs" : null,
-                statusCounts.find(s => s.enrichmentStatus === "failed")?._count ? "Some artists failed enrichment - may need retry" : null,
+                completedNoImage > 0
+                    ? `${completedNoImage} artists completed enrichment but have no image - external APIs may be failing or rate limited`
+                    : null,
+                tempMbidCount > 0
+                    ? `${tempMbidCount} artists have temp MBIDs - Fanart.tv won't work for them, relies on Deezer/Last.fm`
+                    : null,
+                statusCounts.find((s) => s.enrichmentStatus === "pending")
+                    ?._count
+                    ? "Enrichment still in progress - check logs"
+                    : null,
+                statusCounts.find((s) => s.enrichmentStatus === "failed")
+                    ?._count
+                    ? "Some artists failed enrichment - may need retry"
+                    : null,
             ].filter(Boolean),
         });
     } catch (error: any) {
-        console.error("[Library] Enrichment diagnostics error:", error?.message);
+        console.error(
+            "[Library] Enrichment diagnostics error:",
+            error?.message
+        );
         res.status(500).json({ error: "Failed to get diagnostics" });
     }
 });
@@ -908,9 +930,9 @@ router.post("/retry-enrichment", async (req, res) => {
             data: { enrichmentStatus: "pending" },
         });
 
-        res.json({ 
+        res.json({
             message: `Reset ${result.count} failed artists to pending`,
-            count: result.count 
+            count: result.count,
         });
     } catch (error: any) {
         console.error("[Library] Retry enrichment error:", error?.message);
@@ -943,25 +965,8 @@ router.get("/artists/:id", async (req, res) => {
                 },
             },
             ownedAlbums: true,
-            similarFrom: {
-                where: {
-                    weight: {
-                        gte: 0.1, // Only show 10%+ similarity (Last.fm match score)
-                    },
-                },
-                take: 10,
-                orderBy: { weight: "desc" },
-                include: {
-                    toArtist: {
-                        select: {
-                            id: true,
-                            mbid: true,
-                            name: true,
-                            heroUrl: true,
-                        },
-                    },
-                },
-            },
+            // Note: similarFrom (FK-based) is no longer used for display
+            // We now use similarArtistsJson which is fetched by default
         };
 
         // Try finding by ID first
@@ -1006,7 +1011,8 @@ router.get("/artists/:id", async (req, res) => {
         // Only fetch from MusicBrainz if the artist hasn't been enriched yet
         let albumsWithOwnership = [];
         const ownedRgMbids = new Set(artist.ownedAlbums.map((o) => o.rgMbid));
-        const isEnriched = artist.ownedAlbums.length > 0 || artist.heroUrl !== null;
+        const isEnriched =
+            artist.ownedAlbums.length > 0 || artist.heroUrl !== null;
 
         // If artist has temp MBID, try to find real MBID by searching MusicBrainz
         let effectiveMbid = artist.mbid;
@@ -1068,27 +1074,36 @@ router.get("/artists/:id", async (req, res) => {
         // ========== Supplement with MusicBrainz discography for "available to download" ==========
         // Always fetch discography if we have a valid MBID - users need to see what's available
         const hasDbAlbums = dbAlbums.length > 0;
-        const shouldFetchDiscography = effectiveMbid && !effectiveMbid.startsWith("temp-");
+        const shouldFetchDiscography =
+            effectiveMbid && !effectiveMbid.startsWith("temp-");
 
         if (shouldFetchDiscography) {
             try {
                 // Check Redis cache first (cache for 24 hours)
                 const discoCacheKey = `discography:${effectiveMbid}`;
                 let releaseGroups: any[] = [];
-                
+
                 const cachedDisco = await redisClient.get(discoCacheKey);
                 if (cachedDisco && cachedDisco !== "NOT_FOUND") {
                     releaseGroups = JSON.parse(cachedDisco);
-                    console.log(`[Artist] Using cached discography (${releaseGroups.length} albums)`);
+                    console.log(
+                        `[Artist] Using cached discography (${releaseGroups.length} albums)`
+                    );
                 } else {
-                    console.log(`[Artist] Fetching discography from MusicBrainz...`);
+                    console.log(
+                        `[Artist] Fetching discography from MusicBrainz...`
+                    );
                     releaseGroups = await musicBrainzService.getReleaseGroups(
                         effectiveMbid,
                         ["album", "ep"],
                         100
                     );
                     // Cache for 24 hours
-                    await redisClient.setEx(discoCacheKey, 24 * 60 * 60, JSON.stringify(releaseGroups));
+                    await redisClient.setEx(
+                        discoCacheKey,
+                        24 * 60 * 60,
+                        JSON.stringify(releaseGroups)
+                    );
                 }
 
                 console.log(
@@ -1236,10 +1251,12 @@ router.get("/artists/:id", async (req, res) => {
             // Check cache first
             const cachedTopTracks = await redisClient.get(topTracksCacheKey);
             let lastfmTopTracks: any[] = [];
-            
+
             if (cachedTopTracks && cachedTopTracks !== "NOT_FOUND") {
                 lastfmTopTracks = JSON.parse(cachedTopTracks);
-                console.log(`[Artist] Using cached top tracks (${lastfmTopTracks.length})`);
+                console.log(
+                    `[Artist] Using cached top tracks (${lastfmTopTracks.length})`
+                );
             } else {
                 // Cache miss - fetch from Last.fm
                 const validMbid =
@@ -1252,8 +1269,14 @@ router.get("/artists/:id", async (req, res) => {
                     10
                 );
                 // Cache for 24 hours
-                await redisClient.setEx(topTracksCacheKey, 24 * 60 * 60, JSON.stringify(lastfmTopTracks));
-                console.log(`[Artist] Cached ${lastfmTopTracks.length} top tracks`);
+                await redisClient.setEx(
+                    topTracksCacheKey,
+                    24 * 60 * 60,
+                    JSON.stringify(lastfmTopTracks)
+                );
+                console.log(
+                    `[Artist] Cached ${lastfmTopTracks.length} top tracks`
+                );
             }
 
             // For each Last.fm track, try to match with library track or add as unowned
@@ -1332,19 +1355,113 @@ router.get("/artists/:id", async (req, res) => {
             effectiveMbid
         );
 
-        // ========== ON-DEMAND SIMILAR ARTISTS FETCHING ==========
+        // ========== SIMILAR ARTISTS (from enriched JSON or Last.fm API) ==========
         let similarArtists: any[] = [];
         const similarCacheKey = `similar-artists:${artist.id}`;
 
-        if (artist.similarFrom.length === 0) {
-            // Check Redis cache first (24-hour cache)
+        // Check if artist has pre-enriched similar artists JSON (full Last.fm data)
+        const enrichedSimilar = artist.similarArtistsJson as Array<{
+            name: string;
+            mbid: string | null;
+            match: number;
+        }> | null;
+
+        if (enrichedSimilar && enrichedSimilar.length > 0) {
+            // Use pre-enriched data from database (fast path)
+            console.log(
+                `[Artist] Using ${enrichedSimilar.length} similar artists from enriched JSON`
+            );
+
+            // First, batch lookup which similar artists exist in our library
+            const similarNames = enrichedSimilar.slice(0, 10).map((s) => s.name.toLowerCase());
+            const similarMbids = enrichedSimilar.slice(0, 10).map((s) => s.mbid).filter(Boolean) as string[];
+            
+            // Find library artists matching by name or mbid
+            const libraryMatches = await prisma.artist.findMany({
+                where: {
+                    OR: [
+                        { normalizedName: { in: similarNames } },
+                        ...(similarMbids.length > 0 ? [{ mbid: { in: similarMbids } }] : []),
+                    ],
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    normalizedName: true,
+                    mbid: true,
+                    heroUrl: true,
+                    _count: {
+                        select: {
+                            albums: {
+                                where: { location: "LIBRARY", tracks: { some: {} } },
+                            },
+                        },
+                    },
+                },
+            });
+            
+            // Create lookup maps for quick matching
+            const libraryByName = new Map(libraryMatches.map((a) => [a.normalizedName?.toLowerCase() || a.name.toLowerCase(), a]));
+            const libraryByMbid = new Map(libraryMatches.filter((a) => a.mbid).map((a) => [a.mbid!, a]));
+
+            // Fetch images in parallel from Deezer (cached in Redis)
+            const similarWithImages = await Promise.all(
+                enrichedSimilar.slice(0, 10).map(async (s) => {
+                    // Check if this artist is in our library
+                    const libraryArtist = (s.mbid && libraryByMbid.get(s.mbid)) || libraryByName.get(s.name.toLowerCase());
+                    
+                    let image = libraryArtist?.heroUrl || null;
+                    
+                    // If no library image, try Deezer
+                    if (!image) {
+                        try {
+                            // Check Redis cache first
+                            const cacheKey = `deezer-artist-image:${s.name}`;
+                            const cached = await redisClient.get(cacheKey);
+                            if (cached && cached !== "NOT_FOUND") {
+                                image = cached;
+                            } else {
+                                image = await deezerService.getArtistImage(s.name);
+                                if (image) {
+                                    await redisClient.setEx(
+                                        cacheKey,
+                                        24 * 60 * 60,
+                                        image
+                                    );
+                                }
+                            }
+                        } catch (err) {
+                            // Deezer failed, leave null
+                        }
+                    }
+
+                    return {
+                        id: libraryArtist?.id || s.name,
+                        name: s.name,
+                        mbid: s.mbid || null,
+                        coverArt: image,
+                        albumCount: 0, // Would require MusicBrainz lookup - skip for performance
+                        ownedAlbumCount: libraryArtist?._count?.albums || 0,
+                        weight: s.match,
+                        inLibrary: !!libraryArtist,
+                    };
+                })
+            );
+
+            similarArtists = similarWithImages;
+        } else {
+            // No enriched data - fetch from Last.fm API with Redis cache
             const cachedSimilar = await redisClient.get(similarCacheKey);
             if (cachedSimilar && cachedSimilar !== "NOT_FOUND") {
                 similarArtists = JSON.parse(cachedSimilar);
-                console.log(`[Artist] Using cached similar artists (${similarArtists.length})`);
+                console.log(
+                    `[Artist] Using cached similar artists (${similarArtists.length})`
+                );
             } else {
                 // Cache miss - fetch from Last.fm
-                console.log(`[Artist] Fetching similar artists from Last.fm...`);
+                console.log(
+                    `[Artist] Fetching similar artists from Last.fm...`
+                );
 
                 try {
                     const validMbid =
@@ -1357,100 +1474,85 @@ router.get("/artists/:id", async (req, res) => {
                         10
                     );
 
+                    // Batch lookup which similar artists exist in our library
+                    const similarNames = lastfmSimilar.map((s: any) => s.name.toLowerCase());
+                    const similarMbids = lastfmSimilar.map((s: any) => s.mbid).filter(Boolean) as string[];
+                    
+                    const libraryMatches = await prisma.artist.findMany({
+                        where: {
+                            OR: [
+                                { normalizedName: { in: similarNames } },
+                                ...(similarMbids.length > 0 ? [{ mbid: { in: similarMbids } }] : []),
+                            ],
+                        },
+                        select: {
+                            id: true,
+                            name: true,
+                            normalizedName: true,
+                            mbid: true,
+                            heroUrl: true,
+                            _count: {
+                                select: {
+                                    albums: {
+                                        where: { location: "LIBRARY", tracks: { some: {} } },
+                                    },
+                                },
+                            },
+                        },
+                    });
+                    
+                    const libraryByName = new Map(libraryMatches.map((a) => [a.normalizedName?.toLowerCase() || a.name.toLowerCase(), a]));
+                    const libraryByMbid = new Map(libraryMatches.filter((a) => a.mbid).map((a) => [a.mbid!, a]));
+
                     // Fetch images in parallel (Deezer only - fastest source)
                     const similarWithImages = await Promise.all(
                         lastfmSimilar.map(async (s: any) => {
-                            let image = null;
-                            try {
-                                image = await deezerService.getArtistImage(s.name);
-                            } catch (err) {
-                                // Deezer failed, leave null
+                            const libraryArtist = (s.mbid && libraryByMbid.get(s.mbid)) || libraryByName.get(s.name.toLowerCase());
+                            
+                            let image = libraryArtist?.heroUrl || null;
+                            
+                            if (!image) {
+                                try {
+                                    image = await deezerService.getArtistImage(
+                                        s.name
+                                    );
+                                } catch (err) {
+                                    // Deezer failed, leave null
+                                }
                             }
 
                             return {
-                                id: s.name,
+                                id: libraryArtist?.id || s.name,
                                 name: s.name,
                                 mbid: s.mbid || null,
                                 coverArt: image,
                                 albumCount: 0,
-                                ownedAlbumCount: 0,
+                                ownedAlbumCount: libraryArtist?._count?.albums || 0,
                                 weight: s.match,
+                                inLibrary: !!libraryArtist,
                             };
                         })
                     );
 
                     similarArtists = similarWithImages;
-                    
+
                     // Cache for 24 hours
-                    await redisClient.setEx(similarCacheKey, 24 * 60 * 60, JSON.stringify(similarArtists));
-                    console.log(`[Artist] Cached ${similarArtists.length} similar artists`);
+                    await redisClient.setEx(
+                        similarCacheKey,
+                        24 * 60 * 60,
+                        JSON.stringify(similarArtists)
+                    );
+                    console.log(
+                        `[Artist] Cached ${similarArtists.length} similar artists`
+                    );
                 } catch (error) {
-                    console.error(`[Artist] Failed to fetch similar artists:`, error);
+                    console.error(
+                        `[Artist] Failed to fetch similar artists:`,
+                        error
+                    );
                     similarArtists = [];
                 }
             }
-        } else {
-            // Use enriched data from database
-            console.log(
-                `[Artist] Using ${artist.similarFrom.length} similar artists from database`
-            );
-
-            // Format similar artists with coverArt and album counts
-            const similarArtistIds = artist.similarFrom.map(
-                (s) => s.toArtist.id
-            );
-
-            console.log(
-                `Fetching album counts for ${similarArtistIds.length} similar artists...`
-            );
-
-            // Count TOTAL albums in discography (from Album - enriched MusicBrainz data)
-            const discographyCounts = await prisma.album.groupBy({
-                by: ["artistId"],
-                where: { artistId: { in: similarArtistIds } },
-                _count: { rgMbid: true },
-            });
-            const discographyCountMap = new Map(
-                discographyCounts.map((ac) => [ac.artistId, ac._count.rgMbid])
-            );
-            console.log(
-                `Discography counts: ${discographyCountMap.size} artists have albums`
-            );
-
-            // Count albums USER OWNS (from OwnedAlbum - tracking table)
-            const userLibraryCounts = await prisma.ownedAlbum.groupBy({
-                by: ["artistId"],
-                where: { artistId: { in: similarArtistIds } },
-                _count: { rgMbid: true },
-            });
-            const userLibraryCountMap = new Map(
-                userLibraryCounts.map((ac) => [ac.artistId, ac._count.rgMbid])
-            );
-            console.log(
-                `User library counts: ${userLibraryCountMap.size} artists are owned`
-            );
-
-            // Use DataCacheService for batch image lookup
-            const similarImageMap = await dataCacheService.getArtistImagesBatch(
-                artist.similarFrom.map((s) => ({
-                    id: s.toArtist.id,
-                    heroUrl: s.toArtist.heroUrl,
-                }))
-            );
-
-            similarArtists = artist.similarFrom.map((s) => {
-                const albumCount = discographyCountMap.get(s.toArtist.id) || 0;
-                const ownedAlbumCount = userLibraryCountMap.get(s.toArtist.id) || 0;
-                const coverArt = similarImageMap.get(s.toArtist.id) || s.toArtist.heroUrl || null;
-
-                return {
-                    ...s.toArtist,
-                    coverArt,
-                    albumCount,
-                    ownedAlbumCount,
-                    weight: s.weight,
-                };
-            });
         }
 
         res.json({
@@ -1488,8 +1590,8 @@ router.get("/albums", async (req, res) => {
             const ownedAlbumMbids = await prisma.ownedAlbum.findMany({
                 select: { rgMbid: true },
             });
-            const ownedMbids = ownedAlbumMbids.map(oa => oa.rgMbid);
-            
+            const ownedMbids = ownedAlbumMbids.map((oa) => oa.rgMbid);
+
             // Albums with LIBRARY location OR rgMbid in OwnedAlbum
             where.OR = [
                 { location: "LIBRARY", tracks: { some: {} } },
@@ -1505,10 +1607,7 @@ router.get("/albums", async (req, res) => {
             if (where.OR) {
                 // If we have OR conditions, wrap with AND
                 where = {
-                    AND: [
-                        { OR: where.OR },
-                        { artistId: artistId as string }
-                    ]
+                    AND: [{ OR: where.OR }, { artistId: artistId as string }],
                 };
             } else {
                 where.artistId = artistId as string;
@@ -2092,14 +2191,14 @@ router.get("/cover-art/:id?", imageLimiter, async (req, res) => {
 router.get("/album-cover/:mbid", imageLimiter, async (req, res) => {
     try {
         const { mbid } = req.params;
-        
+
         if (!mbid || mbid.startsWith("temp-")) {
             return res.status(400).json({ error: "Valid MBID required" });
         }
 
         // Fetch from Cover Art Archive (this uses caching internally)
         const coverUrl = await coverArtService.getCoverArt(mbid);
-        
+
         if (!coverUrl) {
             // Return 204 No Content instead of 404 to avoid console spam
             // Cover Art Archive doesn't have covers for all albums
@@ -2262,9 +2361,15 @@ router.get("/tracks/:id/stream", async (req, res) => {
             });
             requestedQuality = settings?.playbackQuality || "medium";
         }
-        
-        const ext = track.filePath ? path.extname(track.filePath).toLowerCase() : "";
-        console.log(`[STREAM] Quality: requested=${quality || 'default'}, using=${requestedQuality}, format=${ext}`);
+
+        const ext = track.filePath
+            ? path.extname(track.filePath).toLowerCase()
+            : "";
+        console.log(
+            `[STREAM] Quality: requested=${
+                quality || "default"
+            }, using=${requestedQuality}, format=${ext}`
+        );
 
         // === NATIVE FILE STREAMING ===
         // Check if track has native file path
@@ -2279,7 +2384,7 @@ router.get("/tracks/:id/stream", async (req, res) => {
 
                 // Get absolute path to source file
                 // Normalize path separators for cross-platform compatibility (Windows -> Linux)
-                const normalizedFilePath = track.filePath.replace(/\\/g, '/');
+                const normalizedFilePath = track.filePath.replace(/\\/g, "/");
                 const absolutePath = path.join(
                     config.music.musicPath,
                     normalizedFilePath
@@ -2299,27 +2404,37 @@ router.get("/tracks/:id/stream", async (req, res) => {
                     );
 
                 // Stream file with range support
-                console.log(`[STREAM] Sending file: ${filePath}, mimeType: ${mimeType}`);
-                
-                res.sendFile(filePath, {
-                    headers: {
-                        "Content-Type": mimeType,
-                        "Accept-Ranges": "bytes",
-                        "Cache-Control": "public, max-age=31536000",
-                        "Access-Control-Allow-Origin":
-                            req.headers.origin || "*",
-                        "Access-Control-Allow-Credentials": "true",
-                        "Cross-Origin-Resource-Policy": "cross-origin",
+                console.log(
+                    `[STREAM] Sending file: ${filePath}, mimeType: ${mimeType}`
+                );
+
+                res.sendFile(
+                    filePath,
+                    {
+                        headers: {
+                            "Content-Type": mimeType,
+                            "Accept-Ranges": "bytes",
+                            "Cache-Control": "public, max-age=31536000",
+                            "Access-Control-Allow-Origin":
+                                req.headers.origin || "*",
+                            "Access-Control-Allow-Credentials": "true",
+                            "Cross-Origin-Resource-Policy": "cross-origin",
+                        },
                     },
-                }, (err) => {
-                    // Always destroy the streaming service to clean up intervals
-                    streamingService.destroy();
-                    if (err) {
-                        console.error(`[STREAM] sendFile error:`, err);
-                    } else {
-                        console.log(`[STREAM] File sent successfully: ${path.basename(filePath)}`);
+                    (err) => {
+                        // Always destroy the streaming service to clean up intervals
+                        streamingService.destroy();
+                        if (err) {
+                            console.error(`[STREAM] sendFile error:`, err);
+                        } else {
+                            console.log(
+                                `[STREAM] File sent successfully: ${path.basename(
+                                    filePath
+                                )}`
+                            );
+                        }
                     }
-                });
+                );
 
                 return;
             } catch (err: any) {
@@ -2331,7 +2446,7 @@ router.get("/tracks/:id/stream", async (req, res) => {
                     console.warn(
                         `[STREAM] FFmpeg not available, falling back to original quality`
                     );
-                    const fallbackFilePath = track.filePath.replace(/\\/g, '/');
+                    const fallbackFilePath = track.filePath.replace(/\\/g, "/");
                     const absolutePath = path.join(
                         config.music.musicPath,
                         fallbackFilePath
@@ -2351,23 +2466,30 @@ router.get("/tracks/:id/stream", async (req, res) => {
                             absolutePath
                         );
 
-                    res.sendFile(filePath, {
-                        headers: {
-                            "Content-Type": mimeType,
-                            "Accept-Ranges": "bytes",
-                            "Cache-Control": "public, max-age=31536000",
-                            "Access-Control-Allow-Origin":
-                                req.headers.origin || "*",
-                            "Access-Control-Allow-Credentials": "true",
-                            "Cross-Origin-Resource-Policy": "cross-origin",
+                    res.sendFile(
+                        filePath,
+                        {
+                            headers: {
+                                "Content-Type": mimeType,
+                                "Accept-Ranges": "bytes",
+                                "Cache-Control": "public, max-age=31536000",
+                                "Access-Control-Allow-Origin":
+                                    req.headers.origin || "*",
+                                "Access-Control-Allow-Credentials": "true",
+                                "Cross-Origin-Resource-Policy": "cross-origin",
+                            },
                         },
-                    }, (err) => {
-                        // Always destroy the streaming service to clean up intervals
-                        streamingService.destroy();
-                        if (err) {
-                            console.error(`[STREAM] sendFile fallback error:`, err);
+                        (err) => {
+                            // Always destroy the streaming service to clean up intervals
+                            streamingService.destroy();
+                            if (err) {
+                                console.error(
+                                    `[STREAM] sendFile fallback error:`,
+                                    err
+                                );
+                            }
                         }
-                    });
+                    );
                     return;
                 }
 
@@ -2454,7 +2576,6 @@ router.delete("/tracks/:id", async (req, res) => {
         // Delete file from filesystem if path is available
         if (track.filePath) {
             try {
-
                 const absolutePath = path.join(
                     config.music.musicPath,
                     track.filePath
@@ -2502,7 +2623,6 @@ router.delete("/albums/:id", async (req, res) => {
         if (!album) {
             return res.status(404).json({ error: "Album not found" });
         }
-
 
         // Delete all track files
         let deletedFiles = 0;
@@ -2583,7 +2703,6 @@ router.delete("/artists/:id", async (req, res) => {
             return res.status(404).json({ error: "Artist not found" });
         }
 
-
         // Delete all track files and collect actual artist folders from file paths
         let deletedFiles = 0;
         const artistFoldersToDelete = new Set<string>();
@@ -2639,18 +2758,25 @@ router.delete("/artists/:id", async (req, res) => {
         for (const artistFolder of artistFoldersToDelete) {
             try {
                 if (fs.existsSync(artistFolder)) {
-                    console.log(`[DELETE] Attempting to delete folder: ${artistFolder}`);
-                    
+                    console.log(
+                        `[DELETE] Attempting to delete folder: ${artistFolder}`
+                    );
+
                     // Always try recursive delete with force
                     fs.rmSync(artistFolder, {
                         recursive: true,
                         force: true,
                     });
-                    console.log(`[DELETE] Successfully deleted artist folder: ${artistFolder}`);
+                    console.log(
+                        `[DELETE] Successfully deleted artist folder: ${artistFolder}`
+                    );
                 }
             } catch (err: any) {
-                console.error(`[DELETE] Failed to delete artist folder ${artistFolder}:`, err?.message || err);
-                
+                console.error(
+                    `[DELETE] Failed to delete artist folder ${artistFolder}:`,
+                    err?.message || err
+                );
+
                 // Try alternative: delete contents first, then folder
                 try {
                     const files = fs.readdirSync(artistFolder);
@@ -2659,20 +2785,31 @@ router.delete("/artists/:id", async (req, res) => {
                         try {
                             const stat = fs.statSync(filePath);
                             if (stat.isDirectory()) {
-                                fs.rmSync(filePath, { recursive: true, force: true });
+                                fs.rmSync(filePath, {
+                                    recursive: true,
+                                    force: true,
+                                });
                             } else {
                                 fs.unlinkSync(filePath);
                             }
                             console.log(`[DELETE] Deleted: ${filePath}`);
                         } catch (fileErr: any) {
-                            console.error(`[DELETE] Could not delete ${filePath}:`, fileErr?.message);
+                            console.error(
+                                `[DELETE] Could not delete ${filePath}:`,
+                                fileErr?.message
+                            );
                         }
                     }
                     // Try deleting the now-empty folder
                     fs.rmdirSync(artistFolder);
-                    console.log(`[DELETE] Deleted artist folder after manual cleanup: ${artistFolder}`);
+                    console.log(
+                        `[DELETE] Deleted artist folder after manual cleanup: ${artistFolder}`
+                    );
                 } catch (cleanupErr: any) {
-                    console.error(`[DELETE] Cleanup also failed for ${artistFolder}:`, cleanupErr?.message);
+                    console.error(
+                        `[DELETE] Cleanup also failed for ${artistFolder}:`,
+                        cleanupErr?.message
+                    );
                 }
             }
         }
@@ -2683,14 +2820,22 @@ router.delete("/artists/:id", async (req, res) => {
             path.join(config.music.musicPath, "Soulseek", artist.name),
             path.join(config.music.musicPath, "discovery", artist.name),
         ];
-        
+
         for (const commonPath of commonPaths) {
-            if (fs.existsSync(commonPath) && !artistFoldersToDelete.has(commonPath)) {
+            if (
+                fs.existsSync(commonPath) &&
+                !artistFoldersToDelete.has(commonPath)
+            ) {
                 try {
                     fs.rmSync(commonPath, { recursive: true, force: true });
-                    console.log(`[DELETE] Deleted additional artist folder: ${commonPath}`);
+                    console.log(
+                        `[DELETE] Deleted additional artist folder: ${commonPath}`
+                    );
                 } catch (err: any) {
-                    console.error(`[DELETE] Could not delete ${commonPath}:`, err?.message);
+                    console.error(
+                        `[DELETE] Could not delete ${commonPath}:`,
+                        err?.message
+                    );
                 }
             }
         }
@@ -2701,16 +2846,24 @@ router.delete("/artists/:id", async (req, res) => {
         if (artist.mbid && !artist.mbid.startsWith("temp-")) {
             try {
                 const { lidarrService } = await import("../services/lidarr");
-                const lidarrResult = await lidarrService.deleteArtist(artist.mbid, true);
+                const lidarrResult = await lidarrService.deleteArtist(
+                    artist.mbid,
+                    true
+                );
                 if (lidarrResult.success) {
                     console.log(`[DELETE] Lidarr: ${lidarrResult.message}`);
                     lidarrDeleted = true;
                 } else {
-                    console.warn(`[DELETE] Lidarr deletion note: ${lidarrResult.message}`);
+                    console.warn(
+                        `[DELETE] Lidarr deletion note: ${lidarrResult.message}`
+                    );
                     lidarrError = lidarrResult.message;
                 }
             } catch (err: any) {
-                console.warn("[DELETE] Could not delete from Lidarr:", err?.message || err);
+                console.warn(
+                    "[DELETE] Could not delete from Lidarr:",
+                    err?.message || err
+                );
                 lidarrError = err?.message || "Unknown error";
             }
         }
@@ -2725,13 +2878,19 @@ router.delete("/artists/:id", async (req, res) => {
         }
 
         // Delete from database (cascade will delete albums and tracks)
-        console.log(`[DELETE] Deleting artist from database: ${artist.name} (${artist.id})`);
+        console.log(
+            `[DELETE] Deleting artist from database: ${artist.name} (${artist.id})`
+        );
         await prisma.artist.delete({
             where: { id: artist.id },
         });
 
         console.log(
-            `[DELETE] Successfully deleted artist: ${artist.name} (${deletedFiles} files${lidarrDeleted ? ', removed from Lidarr' : ''})`
+            `[DELETE] Successfully deleted artist: ${
+                artist.name
+            } (${deletedFiles} files${
+                lidarrDeleted ? ", removed from Lidarr" : ""
+            })`
         );
 
         res.json({
@@ -2743,9 +2902,9 @@ router.delete("/artists/:id", async (req, res) => {
     } catch (error: any) {
         console.error("Delete artist error:", error?.message || error);
         console.error("Delete artist stack:", error?.stack);
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Failed to delete artist",
-            details: error?.message || "Unknown error"
+            details: error?.message || "Unknown error",
         });
     }
 });
@@ -2760,10 +2919,13 @@ router.get("/genres", async (req, res) => {
         const artists = await prisma.artist.findMany({
             select: { name: true, normalizedName: true },
         });
-        const artistNames = new Set(artists.flatMap(a => [
-            a.name.toLowerCase(),
-            a.normalizedName?.toLowerCase(),
-        ].filter(Boolean)));
+        const artistNames = new Set(
+            artists.flatMap((a) =>
+                [a.name.toLowerCase(), a.normalizedName?.toLowerCase()].filter(
+                    Boolean
+                )
+            )
+        );
 
         // Get genres from TrackGenre relation (most accurate)
         const trackGenres = await prisma.genre.findMany({
@@ -2805,10 +2967,14 @@ router.get("/genres", async (req, res) => {
                     for (const genre of albumGenres) {
                         const normalized = genre.trim();
                         // Skip if it matches an artist name
-                        if (normalized && !artistNames.has(normalized.toLowerCase())) {
+                        if (
+                            normalized &&
+                            !artistNames.has(normalized.toLowerCase())
+                        ) {
                             genreMap.set(
                                 normalized,
-                                (genreMap.get(normalized) || 0) + album._count.tracks
+                                (genreMap.get(normalized) || 0) +
+                                    album._count.tracks
                             );
                         }
                     }
@@ -2849,7 +3015,7 @@ router.get("/decades", async (req, res) => {
 
         // Group by decade
         const decadeMap = new Map<number, number>();
-        
+
         for (const album of albums) {
             if (album.year) {
                 // Calculate decade start (e.g., 1987 -> 1980, 2023 -> 2020)
@@ -2864,7 +3030,7 @@ router.get("/decades", async (req, res) => {
         // Convert to array, filter by minimum tracks, and sort by decade
         const decades = Array.from(decadeMap.entries())
             .map(([decade, count]) => ({ decade, count }))
-            .filter(d => d.count >= 15) // Minimum 15 tracks for a radio station
+            .filter((d) => d.count >= 15) // Minimum 15 tracks for a radio station
             .sort((a, b) => b.decade - a.decade); // Newest first
 
         res.json({ decades });
@@ -2877,7 +3043,7 @@ router.get("/decades", async (req, res) => {
 /**
  * GET /library/radio
  * Get tracks for a library-based radio station
- * 
+ *
  * Query params:
  * - type: "discovery" | "favorites" | "decade" | "genre" | "mood"
  * - value: Optional value for decade (e.g., "1990") or genre name
@@ -2909,12 +3075,14 @@ router.get("/radio", async (req, res) => {
                     select: { id: true },
                     take: limitNum * 2,
                 });
-                
+
                 if (unplayedTracks.length >= limitNum) {
-                    trackIds = unplayedTracks.map(t => t.id);
+                    trackIds = unplayedTracks.map((t) => t.id);
                 } else {
                     // Fallback: get tracks with the fewest plays using raw count
-                    const leastPlayedTracks = await prisma.$queryRaw<{ id: string }[]>`
+                    const leastPlayedTracks = await prisma.$queryRaw<
+                        { id: string }[]
+                    >`
                         SELECT t.id 
                         FROM "Track" t
                         LEFT JOIN "Play" p ON p."trackId" = t.id
@@ -2922,13 +3090,15 @@ router.get("/radio", async (req, res) => {
                         ORDER BY COUNT(p.id) ASC
                         LIMIT ${limitNum * 2}
                     `;
-                    trackIds = leastPlayedTracks.map(t => t.id);
+                    trackIds = leastPlayedTracks.map((t) => t.id);
                 }
                 break;
 
             case "favorites":
                 // Most-played tracks - use raw query for accurate count ordering
-                const mostPlayedTracks = await prisma.$queryRaw<{ id: string; play_count: bigint }[]>`
+                const mostPlayedTracks = await prisma.$queryRaw<
+                    { id: string; play_count: bigint }[]
+                >`
                     SELECT t.id, COUNT(p.id) as play_count
                     FROM "Track" t
                     LEFT JOIN "Play" p ON p."trackId" = t.id
@@ -2937,17 +3107,19 @@ router.get("/radio", async (req, res) => {
                     ORDER BY play_count DESC
                     LIMIT ${limitNum * 2}
                 `;
-                
+
                 if (mostPlayedTracks.length > 0) {
-                    trackIds = mostPlayedTracks.map(t => t.id);
+                    trackIds = mostPlayedTracks.map((t) => t.id);
                 } else {
                     // No play data yet - just get random tracks
-                    console.log("[Radio:favorites] No play data found, returning random tracks");
+                    console.log(
+                        "[Radio:favorites] No play data found, returning random tracks"
+                    );
                     const randomTracks = await prisma.track.findMany({
                         select: { id: true },
                         take: limitNum * 2,
                     });
-                    trackIds = randomTracks.map(t => t.id);
+                    trackIds = randomTracks.map((t) => t.id);
                 }
                 break;
 
@@ -2955,7 +3127,7 @@ router.get("/radio", async (req, res) => {
                 // Filter by decade (e.g., value = "1990" for 90s)
                 const decadeStart = parseInt(value as string) || 2000;
                 const decadeEnd = decadeStart + 9;
-                
+
                 const decadeTracks = await prisma.track.findMany({
                     where: {
                         album: {
@@ -2968,54 +3140,63 @@ router.get("/radio", async (req, res) => {
                     select: { id: true },
                     take: limitNum * 3,
                 });
-                trackIds = decadeTracks.map(t => t.id);
+                trackIds = decadeTracks.map((t) => t.id);
                 break;
 
             case "genre":
                 // Filter by genre (matches against album or track genre tags)
-                const genreValue = (value as string || "").toLowerCase();
-                
+                const genreValue = ((value as string) || "").toLowerCase();
+
                 // Strategy 1: Check trackGenres relation (most reliable)
                 const genreRelationTracks = await prisma.track.findMany({
                     where: {
-                        trackGenres: { 
-                            some: { 
-                                genre: { 
-                                    name: { contains: genreValue, mode: "insensitive" } 
-                                } 
-                            } 
+                        trackGenres: {
+                            some: {
+                                genre: {
+                                    name: {
+                                        contains: genreValue,
+                                        mode: "insensitive",
+                                    },
+                                },
+                            },
                         },
                     },
                     select: { id: true },
                     take: limitNum * 2,
                 });
-                trackIds = genreRelationTracks.map(t => t.id);
-                
+                trackIds = genreRelationTracks.map((t) => t.id);
+
                 // Strategy 2: If not enough, check album.genres JSON field with raw query
                 if (trackIds.length < limitNum) {
-                    const albumGenreTracks = await prisma.$queryRaw<{ id: string }[]>`
+                    const albumGenreTracks = await prisma.$queryRaw<
+                        { id: string }[]
+                    >`
                         SELECT t.id 
                         FROM "Track" t
                         JOIN "Album" a ON t."albumId" = a.id
                         WHERE a.genres IS NOT NULL 
                         AND EXISTS (
                             SELECT 1 FROM jsonb_array_elements_text(a.genres::jsonb) AS g
-                            WHERE LOWER(g) LIKE ${'%' + genreValue + '%'}
+                            WHERE LOWER(g) LIKE ${"%" + genreValue + "%"}
                         )
                         LIMIT ${limitNum * 2}
                     `;
-                    const newIds = albumGenreTracks.map(t => t.id).filter(id => !trackIds.includes(id));
+                    const newIds = albumGenreTracks
+                        .map((t) => t.id)
+                        .filter((id) => !trackIds.includes(id));
                     trackIds = [...trackIds, ...newIds];
                 }
-                
-                console.log(`[Radio:genre] Found ${trackIds.length} tracks for genre "${genreValue}"`);
+
+                console.log(
+                    `[Radio:genre] Found ${trackIds.length} tracks for genre "${genreValue}"`
+                );
                 break;
 
             case "mood":
                 // Mood-based filtering using audio analysis features
-                const moodValue = (value as string || "").toLowerCase();
+                const moodValue = ((value as string) || "").toLowerCase();
                 let moodWhere: any = { analysisStatus: "completed" };
-                
+
                 switch (moodValue) {
                     case "high-energy":
                         moodWhere = {
@@ -3073,65 +3254,104 @@ router.get("/radio", async (req, res) => {
                             lastfmTags: { has: moodValue },
                         };
                 }
-                
+
                 const moodTracks = await prisma.track.findMany({
                     where: moodWhere,
                     select: { id: true },
                     take: limitNum * 3,
                 });
-                trackIds = moodTracks.map(t => t.id);
+                trackIds = moodTracks.map((t) => t.id);
                 break;
 
             case "workout":
                 // High-energy workout tracks - multiple strategies
                 let workoutTrackIds: string[] = [];
-                
+
                 // Strategy 1: Audio analysis - high energy AND fast BPM
                 const energyTracks = await prisma.track.findMany({
                     where: {
                         analysisStatus: "completed",
                         OR: [
                             // High energy with fast tempo
-                            { AND: [{ energy: { gte: 0.65 } }, { bpm: { gte: 115 } }] },
+                            {
+                                AND: [
+                                    { energy: { gte: 0.65 } },
+                                    { bpm: { gte: 115 } },
+                                ],
+                            },
                             // Has workout mood tag
-                            { moodTags: { hasSome: ["workout", "energetic", "upbeat"] } },
+                            {
+                                moodTags: {
+                                    hasSome: ["workout", "energetic", "upbeat"],
+                                },
+                            },
                         ],
                     },
                     select: { id: true },
                     take: limitNum * 2,
                 });
-                workoutTrackIds = energyTracks.map(t => t.id);
-                console.log(`[Radio:workout] Found ${workoutTrackIds.length} tracks via audio analysis`);
-                
+                workoutTrackIds = energyTracks.map((t) => t.id);
+                console.log(
+                    `[Radio:workout] Found ${workoutTrackIds.length} tracks via audio analysis`
+                );
+
                 // Strategy 2: Genre-based (if not enough from audio)
                 if (workoutTrackIds.length < limitNum) {
                     const workoutGenreNames = [
-                        "rock", "metal", "hard rock", "alternative rock", "punk",
-                        "hip hop", "rap", "trap", "electronic", "edm", "house",
-                        "techno", "drum and bass", "dubstep", "hardstyle",
-                        "metalcore", "hardcore", "industrial", "nu metal", "pop punk"
+                        "rock",
+                        "metal",
+                        "hard rock",
+                        "alternative rock",
+                        "punk",
+                        "hip hop",
+                        "rap",
+                        "trap",
+                        "electronic",
+                        "edm",
+                        "house",
+                        "techno",
+                        "drum and bass",
+                        "dubstep",
+                        "hardstyle",
+                        "metalcore",
+                        "hardcore",
+                        "industrial",
+                        "nu metal",
+                        "pop punk",
                     ];
-                    
+
                     // Check Genre table
                     const workoutGenres = await prisma.genre.findMany({
                         where: {
-                            name: { in: workoutGenreNames, mode: "insensitive" },
+                            name: {
+                                in: workoutGenreNames,
+                                mode: "insensitive",
+                            },
                         },
                         include: {
-                            trackGenres: { select: { trackId: true }, take: 50 },
+                            trackGenres: {
+                                select: { trackId: true },
+                                take: 50,
+                            },
                         },
                     });
-                    
-                    const genreTrackIds = workoutGenres.flatMap(g => g.trackGenres.map(tg => tg.trackId));
-                    workoutTrackIds = [...new Set([...workoutTrackIds, ...genreTrackIds])];
-                    console.log(`[Radio:workout] After genre check: ${workoutTrackIds.length} tracks`);
-                    
+
+                    const genreTrackIds = workoutGenres.flatMap((g) =>
+                        g.trackGenres.map((tg) => tg.trackId)
+                    );
+                    workoutTrackIds = [
+                        ...new Set([...workoutTrackIds, ...genreTrackIds]),
+                    ];
+                    console.log(
+                        `[Radio:workout] After genre check: ${workoutTrackIds.length} tracks`
+                    );
+
                     // Also check album.genres JSON field
                     if (workoutTrackIds.length < limitNum) {
                         const albumGenreTracks = await prisma.track.findMany({
                             where: {
                                 album: {
-                                    OR: workoutGenreNames.map(g => ({
+                                    OR: workoutGenreNames.map((g) => ({
                                         genres: { string_contains: g },
                                     })),
                                 },
@@ -3139,11 +3359,18 @@ router.get("/radio", async (req, res) => {
                             select: { id: true },
                             take: limitNum,
                         });
-                        workoutTrackIds = [...new Set([...workoutTrackIds, ...albumGenreTracks.map(t => t.id)])];
-                        console.log(`[Radio:workout] After album genre check: ${workoutTrackIds.length} tracks`);
+                        workoutTrackIds = [
+                            ...new Set([
+                                ...workoutTrackIds,
+                                ...albumGenreTracks.map((t) => t.id),
+                            ]),
+                        ];
+                        console.log(
+                            `[Radio:workout] After album genre check: ${workoutTrackIds.length} tracks`
+                        );
                     }
                 }
-                
+
                 trackIds = workoutTrackIds;
                 break;
 
@@ -3152,59 +3379,94 @@ router.get("/radio", async (req, res) => {
                 // Uses hybrid approach: Last.fm similarity (filtered to library) + genre matching + vibe boost
                 const artistId = value as string;
                 if (!artistId) {
-                    return res.status(400).json({ error: "Artist ID required for artist radio" });
+                    return res
+                        .status(400)
+                        .json({ error: "Artist ID required for artist radio" });
                 }
-                
-                console.log(`[Radio:artist] Starting artist radio for: ${artistId}`);
-                
+
+                console.log(
+                    `[Radio:artist] Starting artist radio for: ${artistId}`
+                );
+
                 // 1. Get tracks from this artist (they're in library by definition)
                 const artistTracks = await prisma.track.findMany({
                     where: { album: { artistId } },
-                    select: { 
-                        id: true, 
-                        bpm: true, 
-                        energy: true, 
+                    select: {
+                        id: true,
+                        bpm: true,
+                        energy: true,
                         valence: true,
                         danceability: true,
                     },
                 });
-                console.log(`[Radio:artist] Found ${artistTracks.length} tracks from artist`);
-                
+                console.log(
+                    `[Radio:artist] Found ${artistTracks.length} tracks from artist`
+                );
+
                 if (artistTracks.length === 0) {
                     return res.json({ tracks: [] });
                 }
-                
+
                 // Calculate artist's average "vibe" for later matching
-                const analyzedTracks = artistTracks.filter(t => t.bpm || t.energy || t.valence);
-                const avgVibe = analyzedTracks.length > 0 ? {
-                    bpm: analyzedTracks.reduce((sum, t) => sum + (t.bpm || 0), 0) / analyzedTracks.length,
-                    energy: analyzedTracks.reduce((sum, t) => sum + (t.energy || 0), 0) / analyzedTracks.length,
-                    valence: analyzedTracks.reduce((sum, t) => sum + (t.valence || 0), 0) / analyzedTracks.length,
-                    danceability: analyzedTracks.reduce((sum, t) => sum + (t.danceability || 0), 0) / analyzedTracks.length,
-                } : null;
+                const analyzedTracks = artistTracks.filter(
+                    (t) => t.bpm || t.energy || t.valence
+                );
+                const avgVibe =
+                    analyzedTracks.length > 0
+                        ? {
+                              bpm:
+                                  analyzedTracks.reduce(
+                                      (sum, t) => sum + (t.bpm || 0),
+                                      0
+                                  ) / analyzedTracks.length,
+                              energy:
+                                  analyzedTracks.reduce(
+                                      (sum, t) => sum + (t.energy || 0),
+                                      0
+                                  ) / analyzedTracks.length,
+                              valence:
+                                  analyzedTracks.reduce(
+                                      (sum, t) => sum + (t.valence || 0),
+                                      0
+                                  ) / analyzedTracks.length,
+                              danceability:
+                                  analyzedTracks.reduce(
+                                      (sum, t) => sum + (t.danceability || 0),
+                                      0
+                                  ) / analyzedTracks.length,
+                          }
+                        : null;
                 console.log(`[Radio:artist] Artist vibe:`, avgVibe);
-                
+
                 // 2. Get library artist IDs (artists user actually owns)
                 const ownedArtists = await prisma.ownedAlbum.findMany({
                     select: { artistId: true },
-                    distinct: ['artistId'],
+                    distinct: ["artistId"],
                 });
-                const libraryArtistIds = new Set(ownedArtists.map(o => o.artistId));
+                const libraryArtistIds = new Set(
+                    ownedArtists.map((o) => o.artistId)
+                );
                 libraryArtistIds.delete(artistId); // Exclude the current artist
-                console.log(`[Radio:artist] Library has ${libraryArtistIds.size} other artists`);
-                
+                console.log(
+                    `[Radio:artist] Library has ${libraryArtistIds.size} other artists`
+                );
+
                 // 3. Try Last.fm similar artists, filtered to library
                 const similarInLibrary = await prisma.similarArtist.findMany({
-                    where: { 
+                    where: {
                         fromArtistId: artistId,
                         toArtistId: { in: Array.from(libraryArtistIds) },
                     },
                     orderBy: { weight: "desc" },
                     take: 15,
                 });
-                let similarArtistIds = similarInLibrary.map(s => s.toArtistId);
-                console.log(`[Radio:artist] Found ${similarArtistIds.length} Last.fm similar artists in library`);
-                
+                let similarArtistIds = similarInLibrary.map(
+                    (s) => s.toArtistId
+                );
+                console.log(
+                    `[Radio:artist] Found ${similarArtistIds.length} Last.fm similar artists in library`
+                );
+
                 // 4. Fallback: genre matching if not enough similar artists
                 if (similarArtistIds.length < 5 && libraryArtistIds.size > 0) {
                     const artist = await prisma.artist.findUnique({
@@ -3212,7 +3474,7 @@ router.get("/radio", async (req, res) => {
                         select: { genres: true },
                     });
                     const artistGenres = (artist?.genres as string[]) || [];
-                    
+
                     if (artistGenres.length > 0) {
                         // Find library artists with overlapping genres
                         const genreMatchArtists = await prisma.artist.findMany({
@@ -3221,53 +3483,79 @@ router.get("/radio", async (req, res) => {
                             },
                             select: { id: true, genres: true },
                         });
-                        
+
                         // Score artists by genre overlap
                         const scoredArtists = genreMatchArtists
-                            .map(a => {
-                                const theirGenres = (a.genres as string[]) || [];
-                                const overlap = artistGenres.filter(g => 
-                                    theirGenres.some(tg => tg.toLowerCase().includes(g.toLowerCase()) || 
-                                                         g.toLowerCase().includes(tg.toLowerCase()))
+                            .map((a) => {
+                                const theirGenres =
+                                    (a.genres as string[]) || [];
+                                const overlap = artistGenres.filter((g) =>
+                                    theirGenres.some(
+                                        (tg) =>
+                                            tg
+                                                .toLowerCase()
+                                                .includes(g.toLowerCase()) ||
+                                            g
+                                                .toLowerCase()
+                                                .includes(tg.toLowerCase())
+                                    )
                                 ).length;
                                 return { id: a.id, score: overlap };
                             })
-                            .filter(a => a.score > 0)
+                            .filter((a) => a.score > 0)
                             .sort((a, b) => b.score - a.score)
                             .slice(0, 10);
-                        
-                        const genreArtistIds = scoredArtists.map(a => a.id);
-                        similarArtistIds = [...new Set([...similarArtistIds, ...genreArtistIds])];
-                        console.log(`[Radio:artist] After genre matching: ${similarArtistIds.length} similar artists`);
+
+                        const genreArtistIds = scoredArtists.map((a) => a.id);
+                        similarArtistIds = [
+                            ...new Set([
+                                ...similarArtistIds,
+                                ...genreArtistIds,
+                            ]),
+                        ];
+                        console.log(
+                            `[Radio:artist] After genre matching: ${similarArtistIds.length} similar artists`
+                        );
                     }
                 }
-                
+
                 // 5. Get tracks from similar library artists
-                let similarTracks: { id: string; bpm: number | null; energy: number | null; valence: number | null; danceability: number | null }[] = [];
+                let similarTracks: {
+                    id: string;
+                    bpm: number | null;
+                    energy: number | null;
+                    valence: number | null;
+                    danceability: number | null;
+                }[] = [];
                 if (similarArtistIds.length > 0) {
                     similarTracks = await prisma.track.findMany({
-                        where: { album: { artistId: { in: similarArtistIds } } },
-                        select: { 
-                            id: true, 
-                            bpm: true, 
-                            energy: true, 
+                        where: {
+                            album: { artistId: { in: similarArtistIds } },
+                        },
+                        select: {
+                            id: true,
+                            bpm: true,
+                            energy: true,
                             valence: true,
                             danceability: true,
                         },
                     });
-                    console.log(`[Radio:artist] Found ${similarTracks.length} tracks from similar artists`);
+                    console.log(
+                        `[Radio:artist] Found ${similarTracks.length} tracks from similar artists`
+                    );
                 }
-                
+
                 // 6. Apply vibe boost if we have audio analysis data
                 if (avgVibe && similarTracks.length > 0) {
                     // Score each similar track by how close its vibe is to the artist's average
                     similarTracks = similarTracks
-                        .map(t => {
-                            if (!t.bpm && !t.energy && !t.valence) return { ...t, vibeScore: 0.5 };
-                            
+                        .map((t) => {
+                            if (!t.bpm && !t.energy && !t.valence)
+                                return { ...t, vibeScore: 0.5 };
+
                             let score = 0;
                             let factors = 0;
-                            
+
                             if (t.bpm && avgVibe.bpm) {
                                 // BPM within 20 = good match
                                 const bpmDiff = Math.abs(t.bpm - avgVibe.bpm);
@@ -3275,37 +3563,74 @@ router.get("/radio", async (req, res) => {
                                 factors++;
                             }
                             if (t.energy !== null && avgVibe.energy) {
-                                score += 1 - Math.abs((t.energy || 0) - avgVibe.energy);
+                                score +=
+                                    1 -
+                                    Math.abs((t.energy || 0) - avgVibe.energy);
                                 factors++;
                             }
                             if (t.valence !== null && avgVibe.valence) {
-                                score += 1 - Math.abs((t.valence || 0) - avgVibe.valence);
+                                score +=
+                                    1 -
+                                    Math.abs(
+                                        (t.valence || 0) - avgVibe.valence
+                                    );
                                 factors++;
                             }
-                            if (t.danceability !== null && avgVibe.danceability) {
-                                score += 1 - Math.abs((t.danceability || 0) - avgVibe.danceability);
+                            if (
+                                t.danceability !== null &&
+                                avgVibe.danceability
+                            ) {
+                                score +=
+                                    1 -
+                                    Math.abs(
+                                        (t.danceability || 0) -
+                                            avgVibe.danceability
+                                    );
                                 factors++;
                             }
-                            
-                            return { ...t, vibeScore: factors > 0 ? score / factors : 0.5 };
+
+                            return {
+                                ...t,
+                                vibeScore: factors > 0 ? score / factors : 0.5,
+                            };
                         })
-                        .sort((a, b) => (b as any).vibeScore - (a as any).vibeScore);
-                    
-                    console.log(`[Radio:artist] Applied vibe boost, top score: ${(similarTracks[0] as any)?.vibeScore?.toFixed(2)}`);
+                        .sort(
+                            (a, b) =>
+                                (b as any).vibeScore - (a as any).vibeScore
+                        );
+
+                    console.log(
+                        `[Radio:artist] Applied vibe boost, top score: ${(
+                            similarTracks[0] as any
+                        )?.vibeScore?.toFixed(2)}`
+                    );
                 }
-                
+
                 // 7. Mix: ~40% original artist, ~60% similar (vibe-boosted)
-                const originalCount = Math.min(Math.ceil(limitNum * 0.4), artistTracks.length);
-                const similarCount = Math.min(limitNum - originalCount, similarTracks.length);
-                
-                const selectedOriginal = artistTracks.sort(() => Math.random() - 0.5).slice(0, originalCount);
+                const originalCount = Math.min(
+                    Math.ceil(limitNum * 0.4),
+                    artistTracks.length
+                );
+                const similarCount = Math.min(
+                    limitNum - originalCount,
+                    similarTracks.length
+                );
+
+                const selectedOriginal = artistTracks
+                    .sort(() => Math.random() - 0.5)
+                    .slice(0, originalCount);
                 // Take top vibe-matched tracks (already sorted by vibe score), then shuffle slightly
-                const selectedSimilar = similarTracks.slice(0, similarCount * 2)
+                const selectedSimilar = similarTracks
+                    .slice(0, similarCount * 2)
                     .sort(() => Math.random() - 0.3) // Slight shuffle to add variety
                     .slice(0, similarCount);
-                
-                trackIds = [...selectedOriginal, ...selectedSimilar].map(t => t.id);
-                console.log(`[Radio:artist] Final mix: ${selectedOriginal.length} original + ${selectedSimilar.length} similar = ${trackIds.length} tracks`);
+
+                trackIds = [...selectedOriginal, ...selectedSimilar].map(
+                    (t) => t.id
+                );
+                console.log(
+                    `[Radio:artist] Final mix: ${selectedOriginal.length} original + ${selectedSimilar.length} similar = ${trackIds.length} tracks`
+                );
                 break;
 
             case "vibe":
@@ -3313,40 +3638,56 @@ router.get("/radio", async (req, res) => {
                 // Pure audio feature matching with graceful fallbacks
                 const sourceTrackId = value as string;
                 if (!sourceTrackId) {
-                    return res.status(400).json({ error: "Track ID required for vibe matching" });
+                    return res
+                        .status(400)
+                        .json({ error: "Track ID required for vibe matching" });
                 }
-                
-                console.log(`[Radio:vibe] Starting vibe match for track: ${sourceTrackId}`);
-                
+
+                console.log(
+                    `[Radio:vibe] Starting vibe match for track: ${sourceTrackId}`
+                );
+
                 // 1. Get the source track's audio features (including Enhanced mode fields)
-                const sourceTrack = await prisma.track.findUnique({
+                const sourceTrack = (await prisma.track.findUnique({
                     where: { id: sourceTrackId },
                     include: {
                         album: {
-                            select: { 
-                                artistId: true, 
+                            select: {
+                                artistId: true,
                                 genres: true,
-                                artist: { select: { id: true, name: true } }
-                            }
-                        }
-                    }
-                }) as any; // Cast to any to include all Track fields
-                
+                                artist: { select: { id: true, name: true } },
+                            },
+                        },
+                    },
+                })) as any; // Cast to any to include all Track fields
+
                 if (!sourceTrack) {
                     return res.status(404).json({ error: "Track not found" });
                 }
-                
+
                 // Check if track has Enhanced mode analysis
-                const isEnhancedAnalysis = sourceTrack.analysisMode === 'enhanced' || 
-                    (sourceTrack.moodHappy !== null && sourceTrack.moodSad !== null);
-                
-                console.log(`[Radio:vibe] Source: "${sourceTrack.title}" by ${sourceTrack.album.artist.name}`);
-                console.log(`[Radio:vibe] Analysis mode: ${isEnhancedAnalysis ? 'ENHANCED' : 'STANDARD'}`);
-                console.log(`[Radio:vibe] Source features: BPM=${sourceTrack.bpm}, Energy=${sourceTrack.energy}, Valence=${sourceTrack.valence}`);
+                const isEnhancedAnalysis =
+                    sourceTrack.analysisMode === "enhanced" ||
+                    (sourceTrack.moodHappy !== null &&
+                        sourceTrack.moodSad !== null);
+
+                console.log(
+                    `[Radio:vibe] Source: "${sourceTrack.title}" by ${sourceTrack.album.artist.name}`
+                );
+                console.log(
+                    `[Radio:vibe] Analysis mode: ${
+                        isEnhancedAnalysis ? "ENHANCED" : "STANDARD"
+                    }`
+                );
+                console.log(
+                    `[Radio:vibe] Source features: BPM=${sourceTrack.bpm}, Energy=${sourceTrack.energy}, Valence=${sourceTrack.valence}`
+                );
                 if (isEnhancedAnalysis) {
-                    console.log(`[Radio:vibe] ML Moods: Happy=${sourceTrack.moodHappy}, Sad=${sourceTrack.moodSad}, Relaxed=${sourceTrack.moodRelaxed}, Aggressive=${sourceTrack.moodAggressive}, Party=${sourceTrack.moodParty}, Acoustic=${sourceTrack.moodAcoustic}, Electronic=${sourceTrack.moodElectronic}`);
+                    console.log(
+                        `[Radio:vibe] ML Moods: Happy=${sourceTrack.moodHappy}, Sad=${sourceTrack.moodSad}, Relaxed=${sourceTrack.moodRelaxed}, Aggressive=${sourceTrack.moodAggressive}, Party=${sourceTrack.moodParty}, Acoustic=${sourceTrack.moodAcoustic}, Electronic=${sourceTrack.moodElectronic}`
+                    );
                 }
-                
+
                 // Store source features for frontend visualization
                 vibeSourceFeatures = {
                     bpm: sourceTrack.bpm,
@@ -3364,26 +3705,29 @@ router.get("/radio", async (req, res) => {
                     moodParty: sourceTrack.moodParty,
                     moodAcoustic: sourceTrack.moodAcoustic,
                     moodElectronic: sourceTrack.moodElectronic,
-                    analysisMode: isEnhancedAnalysis ? 'enhanced' : 'standard',
+                    analysisMode: isEnhancedAnalysis ? "enhanced" : "standard",
                 };
-                
+
                 let vibeMatchedIds: string[] = [];
                 const sourceArtistId = sourceTrack.album.artistId;
-                
+
                 // 2. Try audio feature matching first (if track is analyzed)
-                const hasAudioData = sourceTrack.bpm || sourceTrack.energy || sourceTrack.valence;
-                
+                const hasAudioData =
+                    sourceTrack.bpm ||
+                    sourceTrack.energy ||
+                    sourceTrack.valence;
+
                 if (hasAudioData) {
                     // Get all analyzed tracks (excluding source) - include Enhanced mode fields
                     const analyzedTracks = await prisma.track.findMany({
-                        where: { 
+                        where: {
                             id: { not: sourceTrackId },
                             analysisStatus: "completed",
                         },
-                        select: { 
-                            id: true, 
-                            bpm: true, 
-                            energy: true, 
+                        select: {
+                            id: true,
+                            bpm: true,
+                            energy: true,
                             valence: true,
                             arousal: true,
                             danceability: true,
@@ -3404,30 +3748,52 @@ router.get("/radio", async (req, res) => {
                             analysisMode: true,
                         },
                     });
-                    
-                    console.log(`[Radio:vibe] Found ${analyzedTracks.length} analyzed tracks to compare`);
-                    
+
+                    console.log(
+                        `[Radio:vibe] Found ${analyzedTracks.length} analyzed tracks to compare`
+                    );
+
                     if (analyzedTracks.length > 0) {
                         // === COSINE SIMILARITY SCORING ===
                         // Industry-standard approach: build feature vectors, compute cosine similarity
                         // Uses ALL 13 features for comprehensive matching
-                        
+
                         // Enhanced valence: mode/tonality + mood + audio features
-                        const calculateEnhancedValence = (track: any): number => {
+                        const calculateEnhancedValence = (
+                            track: any
+                        ): number => {
                             const happy = track.moodHappy ?? 0.5;
                             const sad = track.moodSad ?? 0.5;
                             const party = (track as any).moodParty ?? 0.5;
-                            const isMajor = track.keyScale === 'major';
-                            const isMinor = track.keyScale === 'minor';
-                            const modeValence = isMajor ? 0.3 : (isMinor ? -0.2 : 0);
-                            const moodValence = happy * 0.35 + party * 0.25 + (1 - sad) * 0.2;
-                            const audioValence = (track.energy ?? 0.5) * 0.1 + (track.danceabilityMl ?? track.danceability ?? 0.5) * 0.1;
-                            
-                            return Math.max(0, Math.min(1, moodValence + modeValence + audioValence));
+                            const isMajor = track.keyScale === "major";
+                            const isMinor = track.keyScale === "minor";
+                            const modeValence = isMajor
+                                ? 0.3
+                                : isMinor
+                                ? -0.2
+                                : 0;
+                            const moodValence =
+                                happy * 0.35 + party * 0.25 + (1 - sad) * 0.2;
+                            const audioValence =
+                                (track.energy ?? 0.5) * 0.1 +
+                                (track.danceabilityMl ??
+                                    track.danceability ??
+                                    0.5) *
+                                    0.1;
+
+                            return Math.max(
+                                0,
+                                Math.min(
+                                    1,
+                                    moodValence + modeValence + audioValence
+                                )
+                            );
                         };
 
                         // Enhanced arousal: mood + energy + tempo (avoids unreliable "electronic" mood)
-                        const calculateEnhancedArousal = (track: any): number => {
+                        const calculateEnhancedArousal = (
+                            track: any
+                        ): number => {
                             const aggressive = track.moodAggressive ?? 0.5;
                             const party = (track as any).moodParty ?? 0.5;
                             const relaxed = track.moodRelaxed ?? 0.5;
@@ -3436,10 +3802,22 @@ router.get("/radio", async (req, res) => {
                             const bpm = track.bpm ?? 120;
                             const moodArousal = aggressive * 0.3 + party * 0.2;
                             const energyArousal = energy * 0.25;
-                            const tempoArousal = Math.max(0, Math.min(1, (bpm - 60) / 120)) * 0.15;
-                            const calmReduction = ((1 - relaxed) * 0.05) + ((1 - acoustic) * 0.05);
-                            
-                            return Math.max(0, Math.min(1, moodArousal + energyArousal + tempoArousal + calmReduction));
+                            const tempoArousal =
+                                Math.max(0, Math.min(1, (bpm - 60) / 120)) *
+                                0.15;
+                            const calmReduction =
+                                (1 - relaxed) * 0.05 + (1 - acoustic) * 0.05;
+
+                            return Math.max(
+                                0,
+                                Math.min(
+                                    1,
+                                    moodArousal +
+                                        energyArousal +
+                                        tempoArousal +
+                                        calmReduction
+                                )
+                            );
                         };
 
                         // OOD detection using Energy-based scoring
@@ -3448,36 +3826,44 @@ router.get("/radio", async (req, res) => {
                                 track.moodHappy ?? 0.5,
                                 track.moodSad ?? 0.5,
                                 track.moodRelaxed ?? 0.5,
-                                track.moodAggressive ?? 0.5
+                                track.moodAggressive ?? 0.5,
                             ];
-                            
+
                             const minMood = Math.min(...coreMoods);
                             const maxMood = Math.max(...coreMoods);
-                            
+
                             // Enhanced OOD detection based on research
                             // Flag if all core moods are high (>0.7) with low variance, OR if all are very neutral (~0.5)
-                            const allHigh = minMood > 0.7 && (maxMood - minMood) < 0.3;
-                            const allNeutral = Math.abs(maxMood - 0.5) < 0.15 && Math.abs(minMood - 0.5) < 0.15;
-                            
+                            const allHigh =
+                                minMood > 0.7 && maxMood - minMood < 0.3;
+                            const allNeutral =
+                                Math.abs(maxMood - 0.5) < 0.15 &&
+                                Math.abs(minMood - 0.5) < 0.15;
+
                             return allHigh || allNeutral;
                         };
 
                         // Octave-aware BPM distance calculation
-                        const octaveAwareBPMDistance = (bpm1: number, bpm2: number): number => {
+                        const octaveAwareBPMDistance = (
+                            bpm1: number,
+                            bpm2: number
+                        ): number => {
                             if (!bpm1 || !bpm2) return 0;
-                            
+
                             // Normalize to standard octave range (77-154 BPM)
                             const normalizeToOctave = (bpm: number): number => {
                                 while (bpm < 77) bpm *= 2;
                                 while (bpm > 154) bpm /= 2;
                                 return bpm;
                             };
-                            
+
                             const norm1 = normalizeToOctave(bpm1);
                             const norm2 = normalizeToOctave(bpm2);
-                            
+
                             // Calculate distance on logarithmic scale for harmonic equivalence
-                            const logDistance = Math.abs(Math.log2(norm1) - Math.log2(norm2));
+                            const logDistance = Math.abs(
+                                Math.log2(norm1) - Math.log2(norm2)
+                            );
                             return Math.min(logDistance, 1); // Cap at 1 for similarity calculation
                         };
 
@@ -3485,43 +3871,67 @@ router.get("/radio", async (req, res) => {
                         const buildFeatureVector = (track: any): number[] => {
                             // Detect OOD and apply normalization if needed
                             const isOOD = detectOOD(track);
-                            
+
                             // Get mood values with OOD normalization
-                            const getMoodValue = (value: number | null, defaultValue: number): number => {
+                            const getMoodValue = (
+                                value: number | null,
+                                defaultValue: number
+                            ): number => {
                                 if (!value) return defaultValue;
                                 if (!isOOD) return value;
                                 // Normalize OOD predictions to spread them out (0.2-0.8 range)
-                                return 0.2 + Math.max(0, Math.min(0.6, value - 0.2));
+                                return (
+                                    0.2 +
+                                    Math.max(0, Math.min(0.6, value - 0.2))
+                                );
                             };
-                            
+
                             // Use enhanced valence/arousal calculations
-                            const enhancedValence = calculateEnhancedValence(track);
-                            const enhancedArousal = calculateEnhancedArousal(track);
-                            
+                            const enhancedValence =
+                                calculateEnhancedValence(track);
+                            const enhancedArousal =
+                                calculateEnhancedArousal(track);
+
                             return [
                                 // ML Mood predictions (7 features) - enhanced weighting and OOD handling
-                                getMoodValue(track.moodHappy, 0.5) * 1.3,      // 1.3x weight for semantic features
+                                getMoodValue(track.moodHappy, 0.5) * 1.3, // 1.3x weight for semantic features
                                 getMoodValue(track.moodSad, 0.5) * 1.3,
                                 getMoodValue(track.moodRelaxed, 0.5) * 1.3,
                                 getMoodValue(track.moodAggressive, 0.5) * 1.3,
-                                getMoodValue((track as any).moodParty, 0.5) * 1.3,
-                                getMoodValue((track as any).moodAcoustic, 0.5) * 1.3,
-                                getMoodValue((track as any).moodElectronic, 0.5) * 1.3,
+                                getMoodValue((track as any).moodParty, 0.5) *
+                                    1.3,
+                                getMoodValue((track as any).moodAcoustic, 0.5) *
+                                    1.3,
+                                getMoodValue(
+                                    (track as any).moodElectronic,
+                                    0.5
+                                ) * 1.3,
                                 // Audio features (5 features) - standard weight
                                 track.energy ?? 0.5,
                                 enhancedArousal, // Use enhanced arousal
-                                track.danceabilityMl ?? track.danceability ?? 0.5,
+                                track.danceabilityMl ??
+                                    track.danceability ??
+                                    0.5,
                                 track.instrumentalness ?? 0.5,
                                 // Octave-aware BPM normalized to 0-1
-                                1 - octaveAwareBPMDistance(track.bpm ?? 120, 120), // Similarity to reference tempo
+                                1 -
+                                    octaveAwareBPMDistance(
+                                        track.bpm ?? 120,
+                                        120
+                                    ), // Similarity to reference tempo
                                 // Enhanced key mode with valence consideration
                                 enhancedValence, // Use enhanced valence instead of binary key
                             ];
                         };
-                        
+
                         // Helper: Compute cosine similarity between two vectors
-                        const cosineSimilarity = (a: number[], b: number[]): number => {
-                            let dot = 0, magA = 0, magB = 0;
+                        const cosineSimilarity = (
+                            a: number[],
+                            b: number[]
+                        ): number => {
+                            let dot = 0,
+                                magA = 0,
+                                magB = 0;
                             for (let i = 0; i < a.length; i++) {
                                 dot += a[i] * b[i];
                                 magA += a[i] * a[i];
@@ -3530,40 +3940,55 @@ router.get("/radio", async (req, res) => {
                             if (magA === 0 || magB === 0) return 0;
                             return dot / (Math.sqrt(magA) * Math.sqrt(magB));
                         };
-                        
+
                         // Helper: Compute tag overlap bonus
                         const computeTagBonus = (
-                            sourceTags: string[], 
+                            sourceTags: string[],
                             sourceGenres: string[],
                             trackTags: string[],
                             trackGenres: string[]
                         ): number => {
-                            const sourceSet = new Set([...sourceTags, ...sourceGenres].map(t => t.toLowerCase()));
-                            const trackSet = new Set([...trackTags, ...trackGenres].map(t => t.toLowerCase()));
-                            if (sourceSet.size === 0 || trackSet.size === 0) return 0;
-                            const overlap = [...sourceSet].filter(tag => trackSet.has(tag)).length;
+                            const sourceSet = new Set(
+                                [...sourceTags, ...sourceGenres].map((t) =>
+                                    t.toLowerCase()
+                                )
+                            );
+                            const trackSet = new Set(
+                                [...trackTags, ...trackGenres].map((t) =>
+                                    t.toLowerCase()
+                                )
+                            );
+                            if (sourceSet.size === 0 || trackSet.size === 0)
+                                return 0;
+                            const overlap = [...sourceSet].filter((tag) =>
+                                trackSet.has(tag)
+                            ).length;
                             // Max 5% bonus for tag overlap
                             return Math.min(0.05, overlap * 0.01);
                         };
-                        
+
                         // Build source feature vector once
                         const sourceVector = buildFeatureVector(sourceTrack);
-                        
+
                         // Check if source track has Enhanced mode data
                         const bothEnhanced = isEnhancedAnalysis;
-                        
-                        const scored = analyzedTracks.map(t => {
+
+                        const scored = analyzedTracks.map((t) => {
                             // Check if target track has Enhanced mode data
-                            const targetEnhanced = t.analysisMode === 'enhanced' || 
+                            const targetEnhanced =
+                                t.analysisMode === "enhanced" ||
                                 (t.moodHappy !== null && t.moodSad !== null);
                             const useEnhanced = bothEnhanced && targetEnhanced;
-                            
+
                             // Build target feature vector
                             const targetVector = buildFeatureVector(t as any);
-                            
+
                             // Compute base cosine similarity
-                            let score = cosineSimilarity(sourceVector, targetVector);
-                            
+                            let score = cosineSimilarity(
+                                sourceVector,
+                                targetVector
+                            );
+
                             // Add tag/genre overlap bonus (max 5%)
                             const tagBonus = computeTagBonus(
                                 sourceTrack.lastfmTags || [],
@@ -3571,87 +3996,135 @@ router.get("/radio", async (req, res) => {
                                 t.lastfmTags || [],
                                 t.essentiaGenres || []
                             );
-                            
+
                             // Final score: 95% cosine similarity + 5% tag bonus
                             const finalScore = score * 0.95 + tagBonus;
-                            
-                            return { id: t.id, score: finalScore, enhanced: useEnhanced };
+
+                            return {
+                                id: t.id,
+                                score: finalScore,
+                                enhanced: useEnhanced,
+                            };
                         });
-                        
+
                         // Filter to good matches and sort by score
                         // Use lower threshold (40%) for Enhanced mode since it's more precise
-                        const minThreshold = isEnhancedAnalysis ? 0.40 : 0.50;
+                        const minThreshold = isEnhancedAnalysis ? 0.4 : 0.5;
                         const goodMatches = scored
-                            .filter(t => t.score > minThreshold)
+                            .filter((t) => t.score > minThreshold)
                             .sort((a, b) => b.score - a.score);
-                        
-                        vibeMatchedIds = goodMatches.map(t => t.id);
-                        const enhancedCount = goodMatches.filter(t => t.enhanced).length;
-                        console.log(`[Radio:vibe] Audio matching found ${vibeMatchedIds.length} tracks (>${minThreshold * 100}% similarity)`);
-                        console.log(`[Radio:vibe] Enhanced matches: ${enhancedCount}, Standard matches: ${goodMatches.length - enhancedCount}`);
-                        
+
+                        vibeMatchedIds = goodMatches.map((t) => t.id);
+                        const enhancedCount = goodMatches.filter(
+                            (t) => t.enhanced
+                        ).length;
+                        console.log(
+                            `[Radio:vibe] Audio matching found ${
+                                vibeMatchedIds.length
+                            } tracks (>${minThreshold * 100}% similarity)`
+                        );
+                        console.log(
+                            `[Radio:vibe] Enhanced matches: ${enhancedCount}, Standard matches: ${
+                                goodMatches.length - enhancedCount
+                            }`
+                        );
+
                         if (goodMatches.length > 0) {
-                            console.log(`[Radio:vibe] Top match score: ${goodMatches[0].score.toFixed(2)} (${goodMatches[0].enhanced ? 'enhanced' : 'standard'})`);
+                            console.log(
+                                `[Radio:vibe] Top match score: ${goodMatches[0].score.toFixed(
+                                    2
+                                )} (${
+                                    goodMatches[0].enhanced
+                                        ? "enhanced"
+                                        : "standard"
+                                })`
+                            );
                         }
                     }
                 }
-                
+
                 // 3. Fallback A: Same artist's other tracks
                 if (vibeMatchedIds.length < limitNum) {
                     const artistTracks = await prisma.track.findMany({
-                        where: { 
+                        where: {
                             album: { artistId: sourceArtistId },
                             id: { notIn: [sourceTrackId, ...vibeMatchedIds] },
                         },
                         select: { id: true },
                     });
-                    const newIds = artistTracks.map(t => t.id);
+                    const newIds = artistTracks.map((t) => t.id);
                     vibeMatchedIds = [...vibeMatchedIds, ...newIds];
-                    console.log(`[Radio:vibe] Fallback A (same artist): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`);
+                    console.log(
+                        `[Radio:vibe] Fallback A (same artist): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`
+                    );
                 }
-                
+
                 // 4. Fallback B: Similar artists from Last.fm (filtered to library)
                 if (vibeMatchedIds.length < limitNum) {
                     const ownedArtistIds = await prisma.ownedAlbum.findMany({
                         select: { artistId: true },
-                        distinct: ['artistId'],
+                        distinct: ["artistId"],
                     });
-                    const libraryArtistSet = new Set(ownedArtistIds.map(o => o.artistId));
+                    const libraryArtistSet = new Set(
+                        ownedArtistIds.map((o) => o.artistId)
+                    );
                     libraryArtistSet.delete(sourceArtistId);
-                    
+
                     const similarArtists = await prisma.similarArtist.findMany({
-                        where: { 
+                        where: {
                             fromArtistId: sourceArtistId,
                             toArtistId: { in: Array.from(libraryArtistSet) },
                         },
                         orderBy: { weight: "desc" },
                         take: 10,
                     });
-                    
+
                     if (similarArtists.length > 0) {
-                        const similarArtistTracks = await prisma.track.findMany({
-                            where: { 
-                                album: { artistId: { in: similarArtists.map(s => s.toArtistId) } },
-                                id: { notIn: [sourceTrackId, ...vibeMatchedIds] },
-                            },
-                            select: { id: true },
-                        });
-                        const newIds = similarArtistTracks.map(t => t.id);
+                        const similarArtistTracks = await prisma.track.findMany(
+                            {
+                                where: {
+                                    album: {
+                                        artistId: {
+                                            in: similarArtists.map(
+                                                (s) => s.toArtistId
+                                            ),
+                                        },
+                                    },
+                                    id: {
+                                        notIn: [
+                                            sourceTrackId,
+                                            ...vibeMatchedIds,
+                                        ],
+                                    },
+                                },
+                                select: { id: true },
+                            }
+                        );
+                        const newIds = similarArtistTracks.map((t) => t.id);
                         vibeMatchedIds = [...vibeMatchedIds, ...newIds];
-                        console.log(`[Radio:vibe] Fallback B (similar artists): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`);
+                        console.log(
+                            `[Radio:vibe] Fallback B (similar artists): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`
+                        );
                     }
                 }
-                
+
                 // 5. Fallback C: Same genre (using TrackGenre relation)
-                const sourceGenres = (sourceTrack.album.genres as string[]) || [];
-                if (vibeMatchedIds.length < limitNum && sourceGenres.length > 0) {
+                const sourceGenres =
+                    (sourceTrack.album.genres as string[]) || [];
+                if (
+                    vibeMatchedIds.length < limitNum &&
+                    sourceGenres.length > 0
+                ) {
                     // Search using the TrackGenre relation for better accuracy
                     const genreTracks = await prisma.track.findMany({
                         where: {
                             trackGenres: {
                                 some: {
                                     genre: {
-                                        name: { in: sourceGenres, mode: "insensitive" },
+                                        name: {
+                                            in: sourceGenres,
+                                            mode: "insensitive",
+                                        },
                                     },
                                 },
                             },
@@ -3660,25 +4133,33 @@ router.get("/radio", async (req, res) => {
                         select: { id: true },
                         take: limitNum,
                     });
-                    const newIds = genreTracks.map(t => t.id);
+                    const newIds = genreTracks.map((t) => t.id);
                     vibeMatchedIds = [...vibeMatchedIds, ...newIds];
-                    console.log(`[Radio:vibe] Fallback C (same genre): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`);
+                    console.log(
+                        `[Radio:vibe] Fallback C (same genre): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`
+                    );
                 }
-                
+
                 // 6. Fallback D: Random from library
                 if (vibeMatchedIds.length < limitNum) {
                     const randomTracks = await prisma.track.findMany({
-                        where: { id: { notIn: [sourceTrackId, ...vibeMatchedIds] } },
+                        where: {
+                            id: { notIn: [sourceTrackId, ...vibeMatchedIds] },
+                        },
                         select: { id: true },
                         take: limitNum - vibeMatchedIds.length,
                     });
-                    const newIds = randomTracks.map(t => t.id);
+                    const newIds = randomTracks.map((t) => t.id);
                     vibeMatchedIds = [...vibeMatchedIds, ...newIds];
-                    console.log(`[Radio:vibe] Fallback D (random): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`);
+                    console.log(
+                        `[Radio:vibe] Fallback D (random): added ${newIds.length} tracks, total: ${vibeMatchedIds.length}`
+                    );
                 }
-                
+
                 trackIds = vibeMatchedIds;
-                console.log(`[Radio:vibe] Final vibe queue: ${trackIds.length} tracks`);
+                console.log(
+                    `[Radio:vibe] Final vibe queue: ${trackIds.length} tracks`
+                );
                 break;
 
             case "all":
@@ -3687,14 +4168,15 @@ router.get("/radio", async (req, res) => {
                 const allTracks = await prisma.track.findMany({
                     select: { id: true },
                 });
-                trackIds = allTracks.map(t => t.id);
+                trackIds = allTracks.map((t) => t.id);
         }
 
         // For vibe mode, keep the sorted order (by match score)
         // For other modes, shuffle the results
-        const finalIds = type === "vibe" 
-            ? trackIds.slice(0, limitNum)  // Already sorted by match score
-            : trackIds.sort(() => Math.random() - 0.5).slice(0, limitNum);
+        const finalIds =
+            type === "vibe"
+                ? trackIds.slice(0, limitNum) // Already sorted by match score
+                : trackIds.sort(() => Math.random() - 0.5).slice(0, limitNum);
 
         if (finalIds.length === 0) {
             return res.json({ tracks: [] });
@@ -3723,72 +4205,155 @@ router.get("/radio", async (req, res) => {
                 },
             },
         });
-        
+
         // For vibe mode, reorder tracks to match the sorted finalIds order
         // (Prisma's findMany with IN doesn't preserve order)
         let orderedTracks = tracks;
         if (type === "vibe") {
-            const trackMap = new Map(tracks.map(t => [t.id, t]));
+            const trackMap = new Map(tracks.map((t) => [t.id, t]));
             orderedTracks = finalIds
-                .map(id => trackMap.get(id))
-                .filter((t): t is typeof tracks[0] => t !== undefined);
+                .map((id) => trackMap.get(id))
+                .filter((t): t is (typeof tracks)[0] => t !== undefined);
         }
-        
+
         // === VIBE QUEUE LOGGING ===
         // Log detailed info for vibe matching analysis (using ordered tracks)
         if (type === "vibe" && vibeSourceFeatures) {
             console.log("\n" + "=".repeat(100));
             console.log("VIBE QUEUE ANALYSIS - Source Track");
             console.log("=".repeat(100));
-            
+
             // Find source track for logging
             const srcTrack = await prisma.track.findUnique({
                 where: { id: value as string },
                 include: {
                     album: { include: { artist: { select: { name: true } } } },
-                    trackGenres: { include: { genre: { select: { name: true } } } },
+                    trackGenres: {
+                        include: { genre: { select: { name: true } } },
+                    },
                 },
             });
-            
+
             if (srcTrack) {
-                console.log(`SOURCE: "${srcTrack.title}" by ${srcTrack.album.artist.name}`);
+                console.log(
+                    `SOURCE: "${srcTrack.title}" by ${srcTrack.album.artist.name}`
+                );
                 console.log(`  Album: ${srcTrack.album.title}`);
-                console.log(`  Analysis Mode: ${(srcTrack as any).analysisMode || 'unknown'}`);
-                console.log(`  BPM: ${srcTrack.bpm?.toFixed(1) || 'N/A'} | Energy: ${srcTrack.energy?.toFixed(2) || 'N/A'} | Valence: ${srcTrack.valence?.toFixed(2) || 'N/A'}`);
-                console.log(`  Danceability: ${srcTrack.danceability?.toFixed(2) || 'N/A'} | Arousal: ${srcTrack.arousal?.toFixed(2) || 'N/A'} | Key: ${srcTrack.keyScale || 'N/A'}`);
-                console.log(`  ML Moods: Happy=${(srcTrack as any).moodHappy?.toFixed(2) || 'N/A'}, Sad=${(srcTrack as any).moodSad?.toFixed(2) || 'N/A'}, Relaxed=${(srcTrack as any).moodRelaxed?.toFixed(2) || 'N/A'}, Aggressive=${(srcTrack as any).moodAggressive?.toFixed(2) || 'N/A'}`);
-                console.log(`  Genres: ${srcTrack.trackGenres.map(tg => tg.genre.name).join(', ') || 'N/A'}`);
-                console.log(`  Last.fm Tags: ${((srcTrack as any).lastfmTags || []).join(', ') || 'N/A'}`);
-                console.log(`  Mood Tags: ${((srcTrack as any).moodTags || []).join(', ') || 'N/A'}`);
+                console.log(
+                    `  Analysis Mode: ${
+                        (srcTrack as any).analysisMode || "unknown"
+                    }`
+                );
+                console.log(
+                    `  BPM: ${srcTrack.bpm?.toFixed(1) || "N/A"} | Energy: ${
+                        srcTrack.energy?.toFixed(2) || "N/A"
+                    } | Valence: ${srcTrack.valence?.toFixed(2) || "N/A"}`
+                );
+                console.log(
+                    `  Danceability: ${
+                        srcTrack.danceability?.toFixed(2) || "N/A"
+                    } | Arousal: ${
+                        srcTrack.arousal?.toFixed(2) || "N/A"
+                    } | Key: ${srcTrack.keyScale || "N/A"}`
+                );
+                console.log(
+                    `  ML Moods: Happy=${
+                        (srcTrack as any).moodHappy?.toFixed(2) || "N/A"
+                    }, Sad=${
+                        (srcTrack as any).moodSad?.toFixed(2) || "N/A"
+                    }, Relaxed=${
+                        (srcTrack as any).moodRelaxed?.toFixed(2) || "N/A"
+                    }, Aggressive=${
+                        (srcTrack as any).moodAggressive?.toFixed(2) || "N/A"
+                    }`
+                );
+                console.log(
+                    `  Genres: ${
+                        srcTrack.trackGenres
+                            .map((tg) => tg.genre.name)
+                            .join(", ") || "N/A"
+                    }`
+                );
+                console.log(
+                    `  Last.fm Tags: ${
+                        ((srcTrack as any).lastfmTags || []).join(", ") || "N/A"
+                    }`
+                );
+                console.log(
+                    `  Mood Tags: ${
+                        ((srcTrack as any).moodTags || []).join(", ") || "N/A"
+                    }`
+                );
             }
-            
+
             console.log("\n" + "-".repeat(100));
-            console.log(`VIBE QUEUE - ${orderedTracks.length} tracks (showing up to 50, SORTED BY MATCH SCORE)`);
+            console.log(
+                `VIBE QUEUE - ${orderedTracks.length} tracks (showing up to 50, SORTED BY MATCH SCORE)`
+            );
             console.log("-".repeat(100));
-            console.log(`${"#".padEnd(3)} | ${"TRACK".padEnd(35)} | ${"ARTIST".padEnd(20)} | ${"BPM".padEnd(6)} | ${"ENG".padEnd(5)} | ${"VAL".padEnd(5)} | ${"H".padEnd(4)} | ${"S".padEnd(4)} | ${"R".padEnd(4)} | ${"A".padEnd(4)} | MODE    | GENRES`);
+            console.log(
+                `${"#".padEnd(3)} | ${"TRACK".padEnd(35)} | ${"ARTIST".padEnd(
+                    20
+                )} | ${"BPM".padEnd(6)} | ${"ENG".padEnd(5)} | ${"VAL".padEnd(
+                    5
+                )} | ${"H".padEnd(4)} | ${"S".padEnd(4)} | ${"R".padEnd(
+                    4
+                )} | ${"A".padEnd(4)} | MODE    | GENRES`
+            );
             console.log("-".repeat(100));
-            
+
             orderedTracks.slice(0, 50).forEach((track, i) => {
                 const t = track as any;
                 const title = track.title.substring(0, 33).padEnd(35);
-                const artist = track.album.artist.name.substring(0, 18).padEnd(20);
-                const bpm = track.bpm ? track.bpm.toFixed(0).padEnd(6) : "N/A".padEnd(6);
-                const energy = track.energy !== null ? track.energy.toFixed(2).padEnd(5) : "N/A".padEnd(5);
-                const valence = track.valence !== null ? track.valence.toFixed(2).padEnd(5) : "N/A".padEnd(5);
-                const happy = t.moodHappy !== null ? t.moodHappy.toFixed(2).padEnd(4) : "N/A".padEnd(4);
-                const sad = t.moodSad !== null ? t.moodSad.toFixed(2).padEnd(4) : "N/A".padEnd(4);
-                const relaxed = t.moodRelaxed !== null ? t.moodRelaxed.toFixed(2).padEnd(4) : "N/A".padEnd(4);
-                const aggressive = t.moodAggressive !== null ? t.moodAggressive.toFixed(2).padEnd(4) : "N/A".padEnd(4);
-                const mode = (t.analysisMode || "std").substring(0, 7).padEnd(8);
-                const genres = track.trackGenres.slice(0, 3).map(tg => tg.genre.name).join(", ");
-                
-                console.log(`${String(i + 1).padEnd(3)} | ${title} | ${artist} | ${bpm} | ${energy} | ${valence} | ${happy} | ${sad} | ${relaxed} | ${aggressive} | ${mode} | ${genres}`);
+                const artist = track.album.artist.name
+                    .substring(0, 18)
+                    .padEnd(20);
+                const bpm = track.bpm
+                    ? track.bpm.toFixed(0).padEnd(6)
+                    : "N/A".padEnd(6);
+                const energy =
+                    track.energy !== null
+                        ? track.energy.toFixed(2).padEnd(5)
+                        : "N/A".padEnd(5);
+                const valence =
+                    track.valence !== null
+                        ? track.valence.toFixed(2).padEnd(5)
+                        : "N/A".padEnd(5);
+                const happy =
+                    t.moodHappy !== null
+                        ? t.moodHappy.toFixed(2).padEnd(4)
+                        : "N/A".padEnd(4);
+                const sad =
+                    t.moodSad !== null
+                        ? t.moodSad.toFixed(2).padEnd(4)
+                        : "N/A".padEnd(4);
+                const relaxed =
+                    t.moodRelaxed !== null
+                        ? t.moodRelaxed.toFixed(2).padEnd(4)
+                        : "N/A".padEnd(4);
+                const aggressive =
+                    t.moodAggressive !== null
+                        ? t.moodAggressive.toFixed(2).padEnd(4)
+                        : "N/A".padEnd(4);
+                const mode = (t.analysisMode || "std")
+                    .substring(0, 7)
+                    .padEnd(8);
+                const genres = track.trackGenres
+                    .slice(0, 3)
+                    .map((tg) => tg.genre.name)
+                    .join(", ");
+
+                console.log(
+                    `${String(i + 1).padEnd(
+                        3
+                    )} | ${title} | ${artist} | ${bpm} | ${energy} | ${valence} | ${happy} | ${sad} | ${relaxed} | ${aggressive} | ${mode} | ${genres}`
+                );
             });
-            
+
             if (orderedTracks.length > 50) {
                 console.log(`... and ${orderedTracks.length - 50} more tracks`);
             }
-            
+
             console.log("=".repeat(100) + "\n");
         }
 
@@ -3832,16 +4397,17 @@ router.get("/radio", async (req, res) => {
         }));
 
         // For vibe mode, keep sorted order. For other modes, shuffle.
-        const finalTracks = type === "vibe" 
-            ? transformedTracks 
-            : transformedTracks.sort(() => Math.random() - 0.5);
+        const finalTracks =
+            type === "vibe"
+                ? transformedTracks
+                : transformedTracks.sort(() => Math.random() - 0.5);
 
         // Include source features if this was a vibe request
         const response: any = { tracks: finalTracks };
         if (vibeSourceFeatures) {
             response.sourceFeatures = vibeSourceFeatures;
         }
-        
+
         res.json(response);
     } catch (error) {
         console.error("Radio endpoint error:", error);

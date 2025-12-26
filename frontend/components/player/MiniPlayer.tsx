@@ -314,11 +314,12 @@ export function MiniPlayer() {
 
         return (
             <div
-                className="fixed left-2 right-2 z-50 rounded-xl overflow-hidden shadow-xl transition-transform"
+                className="fixed left-2 right-2 z-50 rounded-xl overflow-hidden shadow-xl"
                 style={{
                     bottom: "calc(56px + env(safe-area-inset-bottom, 0px) + 8px)",
                     transform: `translateX(${swipeOffset}px)`,
                     opacity: swipeOpacity,
+                    transition: swipeOffset === 0 ? 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
                 }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -339,42 +340,42 @@ export function MiniPlayer() {
                     />
                 </div>
 
-                {/* Player content */}
+                {/* Player content - more spacious padding */}
                 <div
-                    className="relative flex items-center gap-2.5 px-3 py-2 cursor-pointer"
+                    className="relative flex items-center gap-3 px-3 py-3 cursor-pointer"
                     onClick={() => setPlayerMode("overlay")}
                 >
-                    {/* Album Art */}
-                    <div className="relative w-10 h-10 flex-shrink-0 rounded-md overflow-hidden bg-black/30 shadow-md">
+                    {/* Album Art - slightly larger */}
+                    <div className="relative w-12 h-12 flex-shrink-0 rounded-lg overflow-hidden bg-black/30 shadow-md">
                         {coverUrl ? (
                             <Image
                                 src={coverUrl}
                                 alt={title}
                                 fill
-                                sizes="40px"
+                                sizes="48px"
                                 className="object-cover"
                                 unoptimized
                             />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                                <MusicIcon className="w-4 h-4 text-gray-400" />
+                                <MusicIcon className="w-5 h-5 text-gray-400" />
                             </div>
                         )}
                     </div>
 
                     {/* Track Info */}
                     <div className="flex-1 min-w-0">
-                        <p className="text-white text-[13px] font-medium truncate leading-tight">
+                        <p className="text-white text-sm font-medium truncate leading-tight">
                             {title}
                         </p>
-                        <p className="text-gray-300/70 text-[11px] truncate leading-tight">
+                        <p className="text-gray-300/70 text-xs truncate leading-tight mt-0.5">
                             {subtitle}
                         </p>
                     </div>
 
                     {/* Controls - Vibe & Play/Pause */}
                     <div
-                        className="flex items-center gap-1 flex-shrink-0"
+                        className="flex items-center gap-1.5 flex-shrink-0"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Vibe Button */}
@@ -382,7 +383,7 @@ export function MiniPlayer() {
                             onClick={handleVibeToggle}
                             disabled={!canSkip || isVibeLoading}
                             className={cn(
-                                "w-9 h-9 flex items-center justify-center rounded-full transition-colors",
+                                "w-10 h-10 flex items-center justify-center rounded-full transition-colors",
                                 !canSkip
                                     ? "text-gray-600"
                                     : vibeMode
@@ -396,9 +397,9 @@ export function MiniPlayer() {
                             }
                         >
                             {isVibeLoading ? (
-                                <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                                <Loader2 className="w-5 h-5 animate-spin" />
                             ) : (
-                                <AudioWaveform className="w-[18px] h-[18px]" />
+                                <AudioWaveform className="w-5 h-5" />
                             )}
                         </button>
 
@@ -414,7 +415,7 @@ export function MiniPlayer() {
                                 }
                             }}
                             className={cn(
-                                "w-9 h-9 rounded-full flex items-center justify-center transition shadow-md",
+                                "w-10 h-10 rounded-full flex items-center justify-center transition shadow-md",
                                 isBuffering
                                     ? "bg-white/80 text-black"
                                     : "bg-white text-black hover:scale-105"
@@ -428,11 +429,11 @@ export function MiniPlayer() {
                             }
                         >
                             {isBuffering ? (
-                                <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                                <Loader2 className="w-5 h-5 animate-spin" />
                             ) : isPlaying ? (
-                                <Pause className="w-[18px] h-[18px]" />
+                                <Pause className="w-5 h-5" />
                             ) : (
-                                <Play className="w-[18px] h-[18px] ml-0.5" />
+                                <Play className="w-5 h-5 ml-0.5" />
                             )}
                         </button>
                     </div>

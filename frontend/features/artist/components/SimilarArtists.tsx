@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { SimilarArtist } from "../types";
-import { Music } from "lucide-react";
+import { Music, Library } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface SimilarArtistsProps {
@@ -20,10 +20,11 @@ export function SimilarArtists({
 
     return (
         <section>
-            <h2 className="text-xl font-bold mb-4">
-                Fans Also Like
-            </h2>
-            <div data-tv-section="similar-artists" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <h2 className="text-xl font-bold mb-4">Fans Also Like</h2>
+            <div
+                data-tv-section="similar-artists"
+                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
+            >
                 {similarArtists.map((artist, index) => {
                     const rawImage = artist.coverArt || artist.image;
                     const imageUrl = rawImage
@@ -33,17 +34,22 @@ export function SimilarArtists({
                         ? Math.round(artist.weight * 100)
                         : null;
 
+                    // For library artists, use the library ID; otherwise use mbid or name
+                    const navigationId = artist.inLibrary
+                        ? artist.id
+                        : artist.mbid || artist.id;
+
                     return (
                         <div
                             key={artist.id || artist.name}
                             data-tv-card
                             data-tv-card-index={index}
                             tabIndex={0}
-                            onClick={() => onNavigate(artist.mbid || artist.id)}
+                            onClick={() => onNavigate(navigationId)}
                             onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
+                                if (e.key === "Enter") {
                                     e.preventDefault();
-                                    onNavigate(artist.mbid || artist.id);
+                                    onNavigate(navigationId);
                                 }
                             }}
                             className="bg-transparent hover:bg-white/5 transition-all p-3 rounded-md cursor-pointer group"
@@ -64,6 +70,15 @@ export function SimilarArtists({
                                         <Music className="w-12 h-12 text-gray-600" />
                                     </div>
                                 )}
+                                {/* Library indicator badge */}
+                                {artist.inLibrary && (
+                                    <div
+                                        className="absolute bottom-1 right-1 bg-[#ecb200] rounded-full p-1"
+                                        title="In your library"
+                                    >
+                                        <Library className="w-3 h-3 text-black" />
+                                    </div>
+                                )}
                             </div>
 
                             {/* Artist Name */}
@@ -71,13 +86,13 @@ export function SimilarArtists({
                                 {artist.name}
                             </h3>
 
-                            {/* Album Count */}
+                            {/* Album Count - show owned count if in library */}
                             <p className="text-xs text-gray-400 truncate">
                                 {artist.ownedAlbumCount &&
                                 artist.ownedAlbumCount > 0
-                                    ? `${artist.ownedAlbumCount}/${artist.albumCount} albums`
-                                    : artist.albumCount && artist.albumCount > 0
-                                    ? `${artist.albumCount} albums`
+                                    ? `${artist.ownedAlbumCount} album${
+                                          artist.ownedAlbumCount > 1 ? "s" : ""
+                                      } in library`
                                     : "Artist"}
                             </p>
 

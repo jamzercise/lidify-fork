@@ -113,7 +113,7 @@ export function AuthenticatedLayout({ children }: { children: ReactNode }) {
                         <main
                             className="flex-1 bg-gradient-to-b from-[#1a1a1a] via-black to-black mx-2 mb-2 rounded-lg overflow-y-auto relative"
                             style={{
-                                marginTop: "52px",
+                                marginTop: "58px",
                                 marginBottom:
                                     "calc(56px + env(safe-area-inset-bottom, 0px) + 8px)",
                             }}

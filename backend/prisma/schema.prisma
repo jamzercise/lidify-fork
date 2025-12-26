@@ -42,6 +42,7 @@ model User {
   deviceLinkCodes      DeviceLinkCode[]
   hiddenPlaylists      HiddenPlaylist[]
   notifications        Notification[]
+  userMoodMix          UserMoodMix?
 }
 
 model UserSettings {
@@ -129,17 +130,18 @@ model SystemSettings {
 }
 
 model Artist {
-  id               String                   @id @default(cuid())
-  mbid             String                   @unique
-  name             String
-  normalizedName   String                   @default("") // Lowercase version for case-insensitive matching
-  summary          String?                  @db.Text
-  heroUrl          String?
-  genres           Json? // Array of genre strings from Last.fm/MusicBrainz
-  lastSynced       DateTime                 @default(now())
-  lastEnriched     DateTime?
-  enrichmentStatus String                   @default("pending") // pending, enriching, completed, failed
-  searchVector     Unsupported("tsvector")?
+  id                   String                   @id @default(cuid())
+  mbid                 String                   @unique
+  name                 String
+  normalizedName       String                   @default("") // Lowercase version for case-insensitive matching
+  summary              String?                  @db.Text
+  heroUrl              String?
+  genres               Json? // Array of genre strings from Last.fm/MusicBrainz
+  similarArtistsJson   Json? // Full Last.fm similar artists data [{name, mbid, match, image}]
+  lastSynced           DateTime                 @default(now())
+  lastEnriched         DateTime?
+  enrichmentStatus     String                   @default("pending") // pending, enriching, completed, failed
+  searchVector         Unsupported("tsvector")?
 
   albums      Album[]
   similarFrom SimilarArtist[] @relation("FromArtist")
@@ -248,16 +250,28 @@ model Track {
   likedBy         LikedTrack[]
   cachedBy        CachedTrack[]
   transcodedFiles TranscodedFile[]
+  moodBuckets     MoodBucket[]
 
   @@index([albumId])
   @@index([fileModified])
   @@index([title])
   @@index([searchVector], type: Gin)
   @@index([analysisStatus])
+  @@index([analysisMode])
   @@index([bpm])
   @@index([energy])
   @@index([valence])
   @@index([danceability])
+  @@index([moodHappy])
+  @@index([moodSad])
+  @@index([moodRelaxed])
+  @@index([moodAggressive])
+  @@index([moodParty])
+  @@index([moodAcoustic])
+  @@index([moodElectronic])
+  @@index([arousal])
+  @@index([acousticness])
+  @@index([instrumentalness])
 }
 
 // Transcoded file cache for audio streaming
@@ -878,6 +892,44 @@ model DeviceLinkCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([code, expiresAt])
+  @@index([userId])
+}
+
+// ============================================
+// Mood Mixer System (Pre-computed Mood Buckets)
+// ============================================
+
+// Pre-computed mood assignments for fast mood mix generation
+// Tracks are assigned to mood buckets during audio analysis
+model MoodBucket {
+  id        String   @id @default(cuid())
+  trackId   String
+  mood      String   // happy, sad, chill, energetic, party, focus, melancholy, aggressive, acoustic
+  score     Float    // Confidence score 0-1
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, mood])
+  @@index([mood, score(sort: Desc)])
+  @@index([trackId])
+}
+
+// User's active mood mix selection
+// Stores the last generated mood mix for display on the home page
+model UserMoodMix {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  mood        String   // The selected mood (happy, sad, etc.)
+  trackIds    String[] // Cached track IDs for the mix
+  coverUrls   String[] // Cached cover URLs for display
+  generatedAt DateTime // When this mix was generated
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 

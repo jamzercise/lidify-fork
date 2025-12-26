@@ -52,6 +52,11 @@ class HowlerEngine {
     private readonly popFadeMs: number = 10; // ms - micro-fade to reduce click/pop on track changes
     private shouldRetryLoads: boolean = false; // Only retry transient load errors where it helps (Android WebView)
     private cleanupTimeoutId: NodeJS.Timeout | null = null; // Track cleanup timeout to prevent race conditions
+    
+    // Seek state management - prevents stale timeupdate events during seeks
+    private isSeeking: boolean = false;
+    private seekTargetTime: number | null = null;
+    private seekTimeoutId: NodeJS.Timeout | null = null;
 
     constructor() {
         // Initialize event listener maps
@@ -105,13 +110,15 @@ class HowlerEngine {
         this.state.currentSrc = src;
 
         // Detect if running in Android WebView (for graceful degradation)
-        const isAndroidWebView = typeof navigator !== "undefined" && 
-            /wv/.test(navigator.userAgent.toLowerCase()) && 
+        const isAndroidWebView =
+            typeof navigator !== "undefined" &&
+            /wv/.test(navigator.userAgent.toLowerCase()) &&
             /android/.test(navigator.userAgent.toLowerCase());
         this.shouldRetryLoads = isAndroidWebView;
 
         // Check if this is a podcast/audiobook stream (they need HTML5 Audio for Range request support)
-        const isPodcastOrAudiobook = src.includes("/api/podcasts/") || src.includes("/api/audiobooks/");
+        const isPodcastOrAudiobook =
+            src.includes("/api/podcasts/") || src.includes("/api/audiobooks/");
 
         // Build Howl config
         // Note: On Android WebView, HTML5 Audio causes crackling/popping on track changes
@@ -164,13 +171,24 @@ class HowlerEngine {
                 }
             },
             onloaderror: (id, error) => {
-                console.error("[HowlerEngine] Load error:", error, "Attempt:", this.retryCount + 1);
+                console.error(
+                    "[HowlerEngine] Load error:",
+                    error,
+                    "Attempt:",
+                    this.retryCount + 1
+                );
                 this.isLoading = false;
 
                 // Retry logic for transient errors (common on Android WebView)
-                if (this.shouldRetryLoads && this.retryCount < this.maxRetries && this.state.currentSrc) {
+                if (
+                    this.shouldRetryLoads &&
+                    this.retryCount < this.maxRetries &&
+                    this.state.currentSrc
+                ) {
                     this.retryCount++;
-                    console.log(`[HowlerEngine] Retrying load (attempt ${this.retryCount}/${this.maxRetries})...`);
+                    console.log(
+                        `[HowlerEngine] Retrying load (attempt ${this.retryCount}/${this.maxRetries})...`
+                    );
 
                     // Save src before cleanup
                     const srcToRetry = this.state.currentSrc;
@@ -183,7 +201,12 @@ class HowlerEngine {
 
                     // Wait a bit before retrying
                     setTimeout(() => {
-                        this.load(srcToRetry, autoplayToRetry, formatToRetry, true);
+                        this.load(
+                            srcToRetry,
+                            autoplayToRetry,
+                            formatToRetry,
+                            true
+                        );
                     }, 500 * this.retryCount); // Exponential backoff
                     return;
                 }
@@ -276,14 +299,45 @@ class HowlerEngine {
 
     /**
      * Seek to a specific time
-     * Simple seek - UI handles buffering state if needed
+     * Includes seek locking to prevent stale timeupdate events from causing UI flicker
      */
     seek(time: number): void {
         if (!this.howl) return;
 
+        // Set seek lock - this prevents timeupdate from emitting stale values
+        this.isSeeking = true;
+        this.seekTargetTime = time;
+
+        // Clear any existing seek timeout
+        if (this.seekTimeoutId) {
+            clearTimeout(this.seekTimeoutId);
+        }
+
         this.state.currentTime = time;
         this.howl.seek(time);
         this.emit("seek", { time });
+
+        // Release seek lock after audio has time to sync
+        // This timeout ensures timeupdate doesn't emit stale values during the seek operation
+        this.seekTimeoutId = setTimeout(() => {
+            this.isSeeking = false;
+            this.seekTargetTime = null;
+            this.seekTimeoutId = null;
+        }, 300);
+    }
+
+    /**
+     * Check if currently in a seek operation
+     */
+    isCurrentlySeeking(): boolean {
+        return this.isSeeking;
+    }
+
+    /**
+     * Get the target seek position (if seeking)
+     */
+    getSeekTarget(): number | null {
+        return this.seekTargetTime;
     }
 
     /**
@@ -416,6 +470,23 @@ class HowlerEngine {
             if (this.howl && this.state.isPlaying) {
                 const seek = this.howl.seek();
                 if (typeof seek === "number") {
+                    // During a seek operation, ignore timeupdate events that report stale positions
+                    // This prevents the UI flicker where old position briefly shows during seek
+                    if (this.isSeeking && this.seekTargetTime !== null) {
+                        const isNearTarget = Math.abs(seek - this.seekTargetTime) < 2;
+                        if (!isNearTarget) {
+                            // Stale position - don't emit, use target instead
+                            return;
+                        }
+                        // Position is near target, seek completed - clear seek state
+                        this.isSeeking = false;
+                        this.seekTargetTime = null;
+                        if (this.seekTimeoutId) {
+                            clearTimeout(this.seekTimeoutId);
+                            this.seekTimeoutId = null;
+                        }
+                    }
+                    
                     this.state.currentTime = seek;
                     this.emit("timeupdate", { time: seek });
                 }
@@ -497,6 +568,13 @@ class HowlerEngine {
             clearTimeout(this.cleanupTimeoutId);
             this.cleanupTimeoutId = null;
         }
+        // Clear seek state
+        if (this.seekTimeoutId) {
+            clearTimeout(this.seekTimeoutId);
+            this.seekTimeoutId = null;
+        }
+        this.isSeeking = false;
+        this.seekTargetTime = null;
     }
 }
 

@@ -56,4 +56,5 @@ export interface SimilarArtist {
     albumCount?: number;
     ownedAlbumCount?: number;
     weight?: number;
+    inLibrary?: boolean;
 }

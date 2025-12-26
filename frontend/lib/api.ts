@@ -1,6 +1,6 @@
 const AUTH_TOKEN_KEY = "auth_token";
 
-// Mood Mix Types
+// Mood Mix Types (Legacy - for old presets endpoint)
 export interface MoodPreset {
     id: string;
     name: string;
@@ -27,6 +27,43 @@ export interface MoodMixParams {
     moodAcoustic?: { min?: number; max?: number };
     moodElectronic?: { min?: number; max?: number };
     limit?: number;
+}
+
+// New Mood Bucket Types (simplified mood system)
+export type MoodType =
+    | "happy"
+    | "sad"
+    | "chill"
+    | "energetic"
+    | "party"
+    | "focus"
+    | "melancholy"
+    | "aggressive"
+    | "acoustic";
+
+export interface MoodBucketPreset {
+    id: MoodType;
+    name: string;
+    color: string;
+    icon: string;
+    trackCount: number;
+}
+
+export interface MoodBucketMix {
+    id: string;
+    mood: MoodType;
+    name: string;
+    description: string;
+    trackIds: string[];
+    coverUrls: string[];
+    trackCount: number;
+    color: string;
+    tracks?: any[];
+}
+
+export interface SavedMoodMixResponse {
+    success: boolean;
+    mix: MoodBucketMix & { generatedAt: string };
 }
 
 // Dynamically determine API URL based on configuration
@@ -1225,7 +1262,7 @@ class ApiClient {
         );
     }
 
-    // Mood on Demand
+    // Mood on Demand (Legacy)
     async getMoodPresets() {
         return this.request<MoodPreset[]>("/mixes/mood/presets");
     }
@@ -1235,6 +1272,30 @@ class ApiClient {
             method: "POST",
             body: JSON.stringify(params),
         });
+    }
+
+    // New Mood Bucket System (simplified, pre-computed)
+    async getMoodBucketPresets() {
+        return this.request<MoodBucketPreset[]>("/mixes/mood/buckets/presets");
+    }
+
+    async getMoodBucketMix(mood: MoodType) {
+        return this.request<MoodBucketMix>(`/mixes/mood/buckets/${mood}`);
+    }
+
+    async saveMoodBucketMix(mood: MoodType) {
+        return this.request<SavedMoodMixResponse>(
+            `/mixes/mood/buckets/${mood}/save`,
+            { method: "POST" }
+        );
+    }
+
+    async backfillMoodBuckets() {
+        return this.request<{
+            success: boolean;
+            processed: number;
+            assigned: number;
+        }>("/mixes/mood/buckets/backfill", { method: "POST" });
     }
 
     // Enrichment

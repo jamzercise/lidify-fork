@@ -32,7 +32,10 @@ const MixCard = memo(
                         {mix.coverUrls.length > 0 ? (
                             <div className="grid grid-cols-2 gap-0 w-full h-full">
                                 {mix.coverUrls.slice(0, 4).map((url, idx) => {
-                                    const proxiedUrl = api.getCoverArtUrl(url, 300);
+                                    const proxiedUrl = api.getCoverArtUrl(
+                                        url,
+                                        300
+                                    );
                                     return (
                                         <div
                                             key={idx}
@@ -51,7 +54,10 @@ const MixCard = memo(
                                 })}
                                 {/* Fill remaining cells if less than 4 covers */}
                                 {Array.from({
-                                    length: Math.max(0, 4 - mix.coverUrls.length),
+                                    length: Math.max(
+                                        0,
+                                        4 - mix.coverUrls.length
+                                    ),
                                 }).map((_, idx) => (
                                     <div
                                         key={`empty-${idx}`}
@@ -79,7 +85,18 @@ const MixCard = memo(
         );
     },
     (prevProps, nextProps) => {
-        return prevProps.mix.id === nextProps.mix.id;
+        // Compare id, name, description, trackCount, and coverUrls to detect content changes
+        // This ensures the card re-renders when mood mix content changes even if ID is the same
+        return (
+            prevProps.mix.id === nextProps.mix.id &&
+            prevProps.mix.name === nextProps.mix.name &&
+            prevProps.mix.description === nextProps.mix.description &&
+            prevProps.mix.trackCount === nextProps.mix.trackCount &&
+            prevProps.mix.coverUrls.length === nextProps.mix.coverUrls.length &&
+            prevProps.mix.coverUrls.every(
+                (url, i) => url === nextProps.mix.coverUrls[i]
+            )
+        );
     }
 );
 

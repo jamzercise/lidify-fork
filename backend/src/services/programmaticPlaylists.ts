@@ -1,5 +1,6 @@
 import { prisma } from "../utils/db";
 import { lastFmService } from "./lastfm";
+import { moodBucketService } from "./moodBucketService";
 
 export interface ProgrammaticMix {
     id: string;
@@ -16,64 +17,91 @@ export interface ProgrammaticMix {
 // Using actual CSS rgba values for inline styles (Tailwind classes get purged at build time)
 const MIX_COLORS: Record<string, string> = {
     // Night/Introspection - Deep blues and purples for calm, night sky, solitude
-    "late-night": "linear-gradient(to bottom, rgba(30, 27, 75, 0.7), rgba(30, 58, 138, 0.5), rgba(15, 23, 42, 0.4))",
-    "3am-thoughts": "linear-gradient(to bottom, rgba(46, 16, 101, 0.7), rgba(88, 28, 135, 0.5), rgba(15, 23, 42, 0.4))",
-    "night-drive": "linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(49, 46, 129, 0.5), rgba(88, 28, 135, 0.4))",
-    
+    "late-night":
+        "linear-gradient(to bottom, rgba(30, 27, 75, 0.7), rgba(30, 58, 138, 0.5), rgba(15, 23, 42, 0.4))",
+    "3am-thoughts":
+        "linear-gradient(to bottom, rgba(46, 16, 101, 0.7), rgba(88, 28, 135, 0.5), rgba(15, 23, 42, 0.4))",
+    "night-drive":
+        "linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(49, 46, 129, 0.5), rgba(88, 28, 135, 0.4))",
+
     // Calm/Relaxation - Teal and seafoam for spa-like tranquility
-    "chill": "linear-gradient(to bottom, rgba(17, 94, 89, 0.6), rgba(22, 78, 99, 0.5), rgba(15, 23, 42, 0.4))",
-    "coffee-shop": "linear-gradient(to bottom, rgba(120, 53, 15, 0.6), rgba(68, 64, 60, 0.5), rgba(38, 38, 38, 0.4))",
-    "rainy-day": "linear-gradient(to bottom, rgba(51, 65, 85, 0.6), rgba(31, 41, 55, 0.5), rgba(39, 39, 42, 0.4))",
-    "sunday-morning": "linear-gradient(to bottom, rgba(253, 186, 116, 0.4), rgba(252, 211, 77, 0.3), rgba(68, 64, 60, 0.4))",
-    
+    chill: "linear-gradient(to bottom, rgba(17, 94, 89, 0.6), rgba(22, 78, 99, 0.5), rgba(15, 23, 42, 0.4))",
+    "coffee-shop":
+        "linear-gradient(to bottom, rgba(120, 53, 15, 0.6), rgba(68, 64, 60, 0.5), rgba(38, 38, 38, 0.4))",
+    "rainy-day":
+        "linear-gradient(to bottom, rgba(51, 65, 85, 0.6), rgba(31, 41, 55, 0.5), rgba(39, 39, 42, 0.4))",
+    "sunday-morning":
+        "linear-gradient(to bottom, rgba(253, 186, 116, 0.4), rgba(252, 211, 77, 0.3), rgba(68, 64, 60, 0.4))",
+
     // Energy/Workout - Red and orange to increase heart rate
-    "workout": "linear-gradient(to bottom, rgba(153, 27, 27, 0.6), rgba(124, 45, 18, 0.5), rgba(68, 64, 60, 0.4))",
-    "confidence-boost": "linear-gradient(to bottom, rgba(194, 65, 12, 0.6), rgba(146, 64, 14, 0.5), rgba(68, 64, 60, 0.4))",
-    
+    workout:
+        "linear-gradient(to bottom, rgba(153, 27, 27, 0.6), rgba(124, 45, 18, 0.5), rgba(68, 64, 60, 0.4))",
+    "confidence-boost":
+        "linear-gradient(to bottom, rgba(194, 65, 12, 0.6), rgba(146, 64, 14, 0.5), rgba(68, 64, 60, 0.4))",
+
     // Happy/Uplifting - Yellow and warm amber for optimism
-    "happy": "linear-gradient(to bottom, rgba(217, 119, 6, 0.5), rgba(161, 98, 7, 0.4), rgba(68, 64, 60, 0.4))",
-    "summer-vibes": "linear-gradient(to bottom, rgba(8, 145, 178, 0.5), rgba(15, 118, 110, 0.4), rgba(30, 58, 138, 0.4))",
-    "golden-hour": "linear-gradient(to bottom, rgba(245, 158, 11, 0.5), rgba(234, 88, 12, 0.4), rgba(136, 19, 55, 0.4))",
-    
+    happy: "linear-gradient(to bottom, rgba(217, 119, 6, 0.5), rgba(161, 98, 7, 0.4), rgba(68, 64, 60, 0.4))",
+    "summer-vibes":
+        "linear-gradient(to bottom, rgba(8, 145, 178, 0.5), rgba(15, 118, 110, 0.4), rgba(30, 58, 138, 0.4))",
+    "golden-hour":
+        "linear-gradient(to bottom, rgba(245, 158, 11, 0.5), rgba(234, 88, 12, 0.4), rgba(136, 19, 55, 0.4))",
+
     // Sad/Melancholy - Cool blue-grays for "feeling blue"
-    "melancholy": "linear-gradient(to bottom, rgba(51, 65, 85, 0.6), rgba(30, 58, 138, 0.5), rgba(17, 24, 39, 0.4))",
-    "sad-girl-sundays": "linear-gradient(to bottom, rgba(136, 19, 55, 0.5), rgba(30, 41, 59, 0.5), rgba(59, 7, 100, 0.4))",
-    "heartbreak-hotel": "linear-gradient(to bottom, rgba(30, 58, 138, 0.6), rgba(88, 28, 135, 0.5), rgba(15, 23, 42, 0.4))",
-    
+    melancholy:
+        "linear-gradient(to bottom, rgba(51, 65, 85, 0.6), rgba(30, 58, 138, 0.5), rgba(17, 24, 39, 0.4))",
+    "sad-girl-sundays":
+        "linear-gradient(to bottom, rgba(136, 19, 55, 0.5), rgba(30, 41, 59, 0.5), rgba(59, 7, 100, 0.4))",
+    "heartbreak-hotel":
+        "linear-gradient(to bottom, rgba(30, 58, 138, 0.6), rgba(88, 28, 135, 0.5), rgba(15, 23, 42, 0.4))",
+
     // Party/Dance - Hot pink and magenta for club energy
-    "dance-floor": "linear-gradient(to bottom, rgba(162, 28, 175, 0.6), rgba(131, 24, 67, 0.5), rgba(59, 7, 100, 0.4))",
-    
+    "dance-floor":
+        "linear-gradient(to bottom, rgba(162, 28, 175, 0.6), rgba(131, 24, 67, 0.5), rgba(59, 7, 100, 0.4))",
+
     // Acoustic/Organic - Warm browns like wood instruments
-    "acoustic": "linear-gradient(to bottom, rgba(146, 64, 14, 0.6), rgba(124, 45, 18, 0.5), rgba(68, 64, 60, 0.4))",
-    "unplugged": "linear-gradient(to bottom, rgba(68, 64, 60, 0.6), rgba(120, 53, 15, 0.5), rgba(38, 38, 38, 0.4))",
-    
+    acoustic:
+        "linear-gradient(to bottom, rgba(146, 64, 14, 0.6), rgba(124, 45, 18, 0.5), rgba(68, 64, 60, 0.4))",
+    unplugged:
+        "linear-gradient(to bottom, rgba(68, 64, 60, 0.6), rgba(120, 53, 15, 0.5), rgba(38, 38, 38, 0.4))",
+
     // Focus/Instrumental - Purple for creativity and concentration
-    "instrumental": "linear-gradient(to bottom, rgba(91, 33, 182, 0.6), rgba(88, 28, 135, 0.5), rgba(15, 23, 42, 0.4))",
-    "focus-flow": "linear-gradient(to bottom, rgba(30, 58, 138, 0.6), rgba(30, 41, 59, 0.5), rgba(17, 24, 39, 0.4))",
-    
+    instrumental:
+        "linear-gradient(to bottom, rgba(91, 33, 182, 0.6), rgba(88, 28, 135, 0.5), rgba(15, 23, 42, 0.4))",
+    "focus-flow":
+        "linear-gradient(to bottom, rgba(30, 58, 138, 0.6), rgba(30, 41, 59, 0.5), rgba(17, 24, 39, 0.4))",
+
     // Adventure/Road Trip - Sunset oranges for freedom
-    "road-trip": "linear-gradient(to bottom, rgba(194, 65, 12, 0.6), rgba(146, 64, 14, 0.5), rgba(14, 165, 233, 0.4))",
-    
+    "road-trip":
+        "linear-gradient(to bottom, rgba(194, 65, 12, 0.6), rgba(146, 64, 14, 0.5), rgba(14, 165, 233, 0.4))",
+
     // Character/Mood Archetypes
-    "main-character": "linear-gradient(to bottom, rgba(245, 158, 11, 0.5), rgba(202, 138, 4, 0.4), rgba(124, 45, 18, 0.4))",
-    "villain-era": "linear-gradient(to bottom, rgba(69, 10, 10, 0.7), rgba(17, 24, 39, 0.6), rgba(0, 0, 0, 0.5))",
-    
+    "main-character":
+        "linear-gradient(to bottom, rgba(245, 158, 11, 0.5), rgba(202, 138, 4, 0.4), rgba(124, 45, 18, 0.4))",
+    "villain-era":
+        "linear-gradient(to bottom, rgba(69, 10, 10, 0.7), rgba(17, 24, 39, 0.6), rgba(0, 0, 0, 0.5))",
+
     // Nostalgia - Sepia and vintage tones
-    "throwback": "linear-gradient(to bottom, rgba(146, 64, 14, 0.5), rgba(124, 45, 18, 0.4), rgba(68, 64, 60, 0.4))",
-    
+    throwback:
+        "linear-gradient(to bottom, rgba(146, 64, 14, 0.5), rgba(124, 45, 18, 0.4), rgba(68, 64, 60, 0.4))",
+
     // Genre/Era based - More neutral but themed
-    "era": "linear-gradient(to bottom, rgba(68, 64, 60, 0.5), rgba(38, 38, 38, 0.4), rgba(39, 39, 42, 0.4))",
-    "genre": "linear-gradient(to bottom, rgba(63, 63, 70, 0.5), rgba(30, 41, 59, 0.4), rgba(17, 24, 39, 0.4))",
-    "top-tracks": "linear-gradient(to bottom, rgba(6, 95, 70, 0.5), rgba(17, 94, 89, 0.4), rgba(15, 23, 42, 0.4))",
-    "rediscover": "linear-gradient(to bottom, rgba(55, 48, 163, 0.5), rgba(76, 29, 149, 0.4), rgba(15, 23, 42, 0.4))",
-    "artist-similar": "linear-gradient(to bottom, rgba(107, 33, 168, 0.5), rgba(112, 26, 117, 0.4), rgba(15, 23, 42, 0.4))",
-    "discovery": "linear-gradient(to bottom, rgba(2, 132, 199, 0.5), rgba(30, 58, 138, 0.4), rgba(15, 23, 42, 0.4))",
-    
+    era: "linear-gradient(to bottom, rgba(68, 64, 60, 0.5), rgba(38, 38, 38, 0.4), rgba(39, 39, 42, 0.4))",
+    genre: "linear-gradient(to bottom, rgba(63, 63, 70, 0.5), rgba(30, 41, 59, 0.4), rgba(17, 24, 39, 0.4))",
+    "top-tracks":
+        "linear-gradient(to bottom, rgba(6, 95, 70, 0.5), rgba(17, 94, 89, 0.4), rgba(15, 23, 42, 0.4))",
+    rediscover:
+        "linear-gradient(to bottom, rgba(55, 48, 163, 0.5), rgba(76, 29, 149, 0.4), rgba(15, 23, 42, 0.4))",
+    "artist-similar":
+        "linear-gradient(to bottom, rgba(107, 33, 168, 0.5), rgba(112, 26, 117, 0.4), rgba(15, 23, 42, 0.4))",
+    discovery:
+        "linear-gradient(to bottom, rgba(2, 132, 199, 0.5), rgba(30, 58, 138, 0.4), rgba(15, 23, 42, 0.4))",
+
     // Mood-on-demand default
-    "mood": "linear-gradient(to bottom, rgba(162, 28, 175, 0.5), rgba(107, 33, 168, 0.4), rgba(15, 23, 42, 0.4))",
-    
+    mood: "linear-gradient(to bottom, rgba(162, 28, 175, 0.5), rgba(107, 33, 168, 0.4), rgba(15, 23, 42, 0.4))",
+
     // Default fallback
-    "default": "linear-gradient(to bottom, rgba(88, 28, 135, 0.4), rgba(26, 26, 26, 1), transparent)",
+    default:
+        "linear-gradient(to bottom, rgba(88, 28, 135, 0.4), rgba(26, 26, 26, 1), transparent)",
 };
 
 // Helper to get color for a mix type
@@ -117,8 +145,8 @@ async function findTracksByGenrePatterns(
     limit: number = 100
 ): Promise<TrackWithAlbumCover[]> {
     // Strategy 1: Use track's lastfmTags and essentiaGenres (native String[] fields)
-    const tagPatterns = genrePatterns.map(g => g.toLowerCase());
-    
+    const tagPatterns = genrePatterns.map((g) => g.toLowerCase());
+
     const tracks = await prisma.track.findMany({
         where: {
             OR: [
@@ -146,30 +174,35 @@ async function findTracksByGenrePatterns(
     });
 
     // Filter by genre patterns (case-insensitive partial match)
-    const genreMatched = albumTracks.filter(t => {
+    const genreMatched = albumTracks.filter((t) => {
         const albumGenres = t.album.genres as string[] | null;
         if (!albumGenres || !Array.isArray(albumGenres)) return false;
-        return albumGenres.some(ag => 
-            genrePatterns.some(gp => ag.toLowerCase().includes(gp.toLowerCase()))
+        return albumGenres.some((ag) =>
+            genrePatterns.some((gp) =>
+                ag.toLowerCase().includes(gp.toLowerCase())
+            )
         );
     });
 
     // Merge unique tracks
-    const existingIds = new Set(tracks.map(t => t.id));
-    const merged = [...tracks, ...genreMatched.filter(t => !existingIds.has(t.id))];
-    
+    const existingIds = new Set(tracks.map((t) => t.id));
+    const merged = [
+        ...tracks,
+        ...genreMatched.filter((t) => !existingIds.has(t.id)),
+    ];
+
     return merged.slice(0, limit);
 }
 
 export class ProgrammaticPlaylistService {
     private readonly TRACK_LIMIT = 20;
     private readonly DAILY_MIX_COUNT = 5;
-    
+
     // Track count thresholds for mix generation
-    private readonly MIN_TRACKS_DAILY = 8;      // Minimum to generate a daily mix
-    private readonly MIN_TRACKS_WEEKLY = 15;    // Minimum to generate a weekly mix
-    private readonly DAILY_TRACK_LIMIT = 10;    // Daily mix size
-    private readonly WEEKLY_TRACK_LIMIT = 20;   // Weekly mix size
+    private readonly MIN_TRACKS_DAILY = 8; // Minimum to generate a daily mix
+    private readonly MIN_TRACKS_WEEKLY = 15; // Minimum to generate a weekly mix
+    private readonly DAILY_TRACK_LIMIT = 10; // Daily mix size
+    private readonly WEEKLY_TRACK_LIMIT = 20; // Weekly mix size
 
     /**
      * Generate 4 daily rotating mixes
@@ -247,7 +280,8 @@ export class ProgrammaticPlaylistService {
             },
             // Audio analysis-based mixes (using Essentia features)
             {
-                fn: () => this.generateHighEnergyMix(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateHighEnergyMix(userId, today + seedSuffix),
                 weight: 2,
                 name: "High Energy Mix",
             },
@@ -262,12 +296,14 @@ export class ProgrammaticPlaylistService {
                 name: "Happy Vibes Mix",
             },
             {
-                fn: () => this.generateMelancholyMix(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateMelancholyMix(userId, today + seedSuffix),
                 weight: 2,
                 name: "Melancholy Mix",
             },
             {
-                fn: () => this.generateDanceFloorMix(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateDanceFloorMix(userId, today + seedSuffix),
                 weight: 2,
                 name: "Dance Floor Mix",
             },
@@ -277,7 +313,8 @@ export class ProgrammaticPlaylistService {
                 name: "Acoustic Mix",
             },
             {
-                fn: () => this.generateInstrumentalMix(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateInstrumentalMix(userId, today + seedSuffix),
                 weight: 2,
                 name: "Instrumental Mix",
             },
@@ -294,12 +331,17 @@ export class ProgrammaticPlaylistService {
             },
             // Curated Vibe Mixes (Daily, 10 tracks)
             {
-                fn: () => this.generateSadGirlSundays(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateSadGirlSundays(userId, today + seedSuffix),
                 weight: 2,
                 name: "Sad Girl Sundays",
             },
             {
-                fn: () => this.generateMainCharacterEnergy(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateMainCharacterEnergy(
+                        userId,
+                        today + seedSuffix
+                    ),
                 weight: 2,
                 name: "Main Character Energy",
             },
@@ -329,7 +371,8 @@ export class ProgrammaticPlaylistService {
                 name: "Golden Hour",
             },
             {
-                fn: () => this.generateShowerKaraoke(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateShowerKaraoke(userId, today + seedSuffix),
                 weight: 2,
                 name: "Shower Karaoke",
             },
@@ -339,17 +382,23 @@ export class ProgrammaticPlaylistService {
                 name: "In My Feelings",
             },
             {
-                fn: () => this.generateMidnightDrive(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateMidnightDrive(userId, today + seedSuffix),
                 weight: 2,
                 name: "Midnight Drive",
             },
             {
-                fn: () => this.generateCoffeeShopVibes(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateCoffeeShopVibes(userId, today + seedSuffix),
                 weight: 2,
                 name: "Coffee Shop Vibes",
             },
             {
-                fn: () => this.generateRomanticizeYourLife(userId, today + seedSuffix),
+                fn: () =>
+                    this.generateRomanticizeYourLife(
+                        userId,
+                        today + seedSuffix
+                    ),
                 weight: 2,
                 name: "Romanticize Your Life",
             },
@@ -478,35 +527,17 @@ export class ProgrammaticPlaylistService {
             console.log(`[MIXES] After fallbacks: ${finalMixes.length} mixes`);
         }
 
-        // Check if user has saved mood preferences and generate their personalized mood mix
+        // Check if user has saved mood mix from the new bucket system (fast lookup)
         try {
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-                select: { moodMixParams: true }
-            });
-
-            if (user?.moodMixParams && typeof user.moodMixParams === 'object') {
-                const params = user.moodMixParams as any;
-                const presetName = params.presetName || "Mood";
-                const mixName = `Your ${presetName} Mix`;
-
-                console.log(`[MIXES] User has saved mood preferences, generating "${mixName}"...`);
-                const moodMix = await this.generateMoodOnDemand(userId, params);
-                if (moodMix) {
-                    // Override the mix metadata with the preset name
-                    const yourMoodMix: ProgrammaticMix = {
-                        ...moodMix,
-                        id: "your-mood-mix",
-                        type: "mood",
-                        name: mixName,
-                        description: `Based on your ${presetName.toLowerCase()} preferences`,
-                    };
-                    finalMixes.push(yourMoodMix);
-                    console.log(`[MIXES] Added "${mixName}" with ${moodMix.trackCount} tracks`);
-                }
+            const savedMoodMix = await moodBucketService.getUserMoodMix(userId);
+            if (savedMoodMix) {
+                console.log(
+                    `[MIXES] User has saved mood mix: "${savedMoodMix.name}" with ${savedMoodMix.trackCount} tracks`
+                );
+                finalMixes.push(savedMoodMix);
             }
         } catch (err) {
-            console.error("[MIXES] Error generating user's mood mix:", err);
+            console.error("[MIXES] Error getting user's saved mood mix:", err);
         }
 
         return finalMixes;
@@ -928,9 +959,22 @@ export class ProgrammaticPlaylistService {
         today: string
     ): Promise<ProgrammaticMix | null> {
         const partyGenres = [
-            "dance", "electronic", "pop", "disco", "house", "techno", "edm",
-            "funk", "electro", "dance pop", "club", "eurodance", "trance",
-            "dubstep", "drum and bass", "hip hop"
+            "dance",
+            "electronic",
+            "pop",
+            "disco",
+            "house",
+            "techno",
+            "edm",
+            "funk",
+            "electro",
+            "dance pop",
+            "club",
+            "eurodance",
+            "trance",
+            "dubstep",
+            "drum and bass",
+            "hip hop",
         ];
 
         let tracks: any[] = [];
@@ -941,21 +985,33 @@ export class ProgrammaticPlaylistService {
             include: {
                 trackGenres: {
                     include: {
-                        track: { include: { album: { select: { coverUrl: true } } } },
+                        track: {
+                            include: { album: { select: { coverUrl: true } } },
+                        },
                     },
                     take: 50,
                 },
             },
         });
         tracks = genres.flatMap((g) => g.trackGenres.map((tg) => tg.track));
-        console.log(`[PARTY MIX] Found ${tracks.length} tracks from Genre table`);
+        console.log(
+            `[PARTY MIX] Found ${tracks.length} tracks from Genre table`
+        );
 
         // Strategy 2: Album genre field (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const albumGenreTracks = await findTracksByGenrePatterns(partyGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[PARTY MIX] After album genre fallback: ${tracks.length} tracks`);
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                partyGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[PARTY MIX] After album genre fallback: ${tracks.length} tracks`
+            );
         }
 
         // Strategy 3: Audio analysis (high energy, high danceability)
@@ -965,19 +1021,31 @@ export class ProgrammaticPlaylistService {
                     analysisStatus: "completed",
                     OR: [
                         { danceability: { gte: 0.7 } },
-                        { AND: [{ energy: { gte: 0.7 } }, { bpm: { gte: 110 } }] },
+                        {
+                            AND: [
+                                { energy: { gte: 0.7 } },
+                                { bpm: { gte: 110 } },
+                            ],
+                        },
                     ],
                 },
                 include: { album: { select: { coverUrl: true } } },
                 take: 50,
             });
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...audioTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[PARTY MIX] After audio analysis fallback: ${tracks.length} tracks`);
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...audioTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[PARTY MIX] After audio analysis fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[PARTY MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[PARTY MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1030,9 +1098,9 @@ export class ProgrammaticPlaylistService {
             include: { album: { select: { coverUrl: true } } },
             take: 100,
         });
-        
+
         console.log(`[CHILL MIX] Enhanced mode: Found ${tracks.length} tracks`);
-        
+
         // Strategy 2: Standard mode fallback
         if (tracks.length < this.MIN_TRACKS_DAILY) {
             console.log(`[CHILL MIX] Falling back to Standard mode`);
@@ -1057,13 +1125,19 @@ export class ProgrammaticPlaylistService {
                 include: { album: { select: { coverUrl: true } } },
                 take: 100,
             });
-            console.log(`[CHILL MIX] Standard mode: Found ${tracks.length} tracks`);
+            console.log(
+                `[CHILL MIX] Standard mode: Found ${tracks.length} tracks`
+            );
         }
-        
-        console.log(`[CHILL MIX] Total: ${tracks.length} tracks matching criteria`);
+
+        console.log(
+            `[CHILL MIX] Total: ${tracks.length} tracks matching criteria`
+        );
 
         if (tracks.length < this.MIN_TRACKS_DAILY) {
-            console.log(`[CHILL MIX] FAILED: Only ${tracks.length} tracks (need ${this.MIN_TRACKS_DAILY})`);
+            console.log(
+                `[CHILL MIX] FAILED: Only ${tracks.length} tracks (need ${this.MIN_TRACKS_DAILY})`
+            );
             return null;
         }
 
@@ -1076,9 +1150,11 @@ export class ProgrammaticPlaylistService {
 
         // Determine if daily or weekly based on available tracks
         const isWeekly = tracks.length >= this.MIN_TRACKS_WEEKLY;
-        const trackLimit = isWeekly ? this.WEEKLY_TRACK_LIMIT : this.DAILY_TRACK_LIMIT;
+        const trackLimit = isWeekly
+            ? this.WEEKLY_TRACK_LIMIT
+            : this.DAILY_TRACK_LIMIT;
         const selectedTracks = shuffled.slice(0, trackLimit);
-        
+
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -1106,10 +1182,25 @@ export class ProgrammaticPlaylistService {
         today: string
     ): Promise<ProgrammaticMix | null> {
         const workoutGenres = [
-            "rock", "metal", "hard rock", "alternative rock", "punk",
-            "hip hop", "rap", "trap", "hardcore", "metalcore",
-            "industrial", "drum and bass", "hardstyle", "nu metal",
-            "electronic", "edm", "house", "techno", "pop punk"
+            "rock",
+            "metal",
+            "hard rock",
+            "alternative rock",
+            "punk",
+            "hip hop",
+            "rap",
+            "trap",
+            "hardcore",
+            "metalcore",
+            "industrial",
+            "drum and bass",
+            "hardstyle",
+            "nu metal",
+            "electronic",
+            "edm",
+            "house",
+            "techno",
+            "pop punk",
         ];
 
         let tracks: any[] = [];
@@ -1131,8 +1222,10 @@ export class ProgrammaticPlaylistService {
             take: 100,
         });
         tracks = enhancedTracks;
-        console.log(`[WORKOUT MIX] Enhanced mode: Found ${tracks.length} tracks`);
-        
+        console.log(
+            `[WORKOUT MIX] Enhanced mode: Found ${tracks.length} tracks`
+        );
+
         // Strategy 2: Standard mode fallback - audio analysis
         if (tracks.length < 15) {
             console.log(`[WORKOUT MIX] Falling back to Standard mode`);
@@ -1140,16 +1233,35 @@ export class ProgrammaticPlaylistService {
                 where: {
                     analysisStatus: "completed",
                     OR: [
-                        { AND: [{ energy: { gte: 0.65 } }, { bpm: { gte: 115 } }] },
-                        { moodTags: { hasSome: ["workout", "energetic", "upbeat", "powerful"] } },
+                        {
+                            AND: [
+                                { energy: { gte: 0.65 } },
+                                { bpm: { gte: 115 } },
+                            ],
+                        },
+                        {
+                            moodTags: {
+                                hasSome: [
+                                    "workout",
+                                    "energetic",
+                                    "upbeat",
+                                    "powerful",
+                                ],
+                            },
+                        },
                     ],
                 },
                 include: { album: { select: { coverUrl: true } } },
                 take: 100,
             });
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...audioTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[WORKOUT MIX] Standard mode: Total ${tracks.length} tracks`);
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...audioTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[WORKOUT MIX] Standard mode: Total ${tracks.length} tracks`
+            );
         }
 
         // Strategy 2: Genre table
@@ -1159,28 +1271,49 @@ export class ProgrammaticPlaylistService {
                 include: {
                     trackGenres: {
                         include: {
-                            track: { include: { album: { select: { coverUrl: true } } } },
+                            track: {
+                                include: {
+                                    album: { select: { coverUrl: true } },
+                                },
+                            },
                         },
                         take: 50,
                     },
                 },
             });
-            const genreTracks = genres.flatMap((g) => g.trackGenres.map((tg) => tg.track));
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...genreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[WORKOUT MIX] After Genre table: ${tracks.length} tracks`);
+            const genreTracks = genres.flatMap((g) =>
+                g.trackGenres.map((tg) => tg.track)
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...genreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[WORKOUT MIX] After Genre table: ${tracks.length} tracks`
+            );
         }
 
         // Strategy 3: Album genre field (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const albumGenreTracks = await findTracksByGenrePatterns(workoutGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[WORKOUT MIX] After album genre fallback: ${tracks.length} tracks`);
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                workoutGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[WORKOUT MIX] After album genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[WORKOUT MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[WORKOUT MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1218,9 +1351,19 @@ export class ProgrammaticPlaylistService {
         today: string
     ): Promise<ProgrammaticMix | null> {
         const focusGenres = [
-            "classical", "instrumental", "jazz", "piano", "ambient",
-            "post-rock", "math rock", "soundtrack", "score",
-            "contemporary classical", "minimal", "modern classical", "neoclassical"
+            "classical",
+            "instrumental",
+            "jazz",
+            "piano",
+            "ambient",
+            "post-rock",
+            "math rock",
+            "soundtrack",
+            "score",
+            "contemporary classical",
+            "minimal",
+            "modern classical",
+            "neoclassical",
         ];
 
         let tracks: any[] = [];
@@ -1231,21 +1374,33 @@ export class ProgrammaticPlaylistService {
             include: {
                 trackGenres: {
                     include: {
-                        track: { include: { album: { select: { coverUrl: true } } } },
+                        track: {
+                            include: { album: { select: { coverUrl: true } } },
+                        },
                     },
                     take: 50,
                 },
             },
         });
         tracks = genres.flatMap((g) => g.trackGenres.map((tg) => tg.track));
-        console.log(`[FOCUS MIX] Found ${tracks.length} tracks from Genre table`);
+        console.log(
+            `[FOCUS MIX] Found ${tracks.length} tracks from Genre table`
+        );
 
         // Strategy 2: Album genre field (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const albumGenreTracks = await findTracksByGenrePatterns(focusGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[FOCUS MIX] After album genre fallback: ${tracks.length} tracks`);
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                focusGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[FOCUS MIX] After album genre fallback: ${tracks.length} tracks`
+            );
         }
 
         // Strategy 3: Audio analysis (high instrumentalness, moderate energy)
@@ -1259,13 +1414,20 @@ export class ProgrammaticPlaylistService {
                 include: { album: { select: { coverUrl: true } } },
                 take: 50,
             });
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...audioTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[FOCUS MIX] After audio analysis fallback: ${tracks.length} tracks`);
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...audioTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[FOCUS MIX] After audio analysis fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[FOCUS MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[FOCUS MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1320,19 +1482,40 @@ export class ProgrammaticPlaylistService {
             take: 100,
         });
         tracks = audioTracks;
-        console.log(`[HIGH ENERGY MIX] Found ${tracks.length} tracks from audio analysis`);
+        console.log(
+            `[HIGH ENERGY MIX] Found ${tracks.length} tracks from audio analysis`
+        );
 
         // Strategy 2: Fallback to energetic genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const energyGenres = ["rock", "metal", "punk", "electronic", "edm", "dance", "hip hop", "trap"];
-            const albumGenreTracks = await findTracksByGenrePatterns(energyGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[HIGH ENERGY MIX] After genre fallback: ${tracks.length} tracks`);
+            const energyGenres = [
+                "rock",
+                "metal",
+                "punk",
+                "electronic",
+                "edm",
+                "dance",
+                "hip hop",
+                "trap",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                energyGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[HIGH ENERGY MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[HIGH ENERGY MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[HIGH ENERGY MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1389,9 +1572,11 @@ export class ProgrammaticPlaylistService {
             include: { album: { select: { coverUrl: true } } },
             take: 100,
         });
-        
-        console.log(`[LATE NIGHT MIX] Enhanced mode: Found ${tracks.length} tracks`);
-        
+
+        console.log(
+            `[LATE NIGHT MIX] Enhanced mode: Found ${tracks.length} tracks`
+        );
+
         // Fallback to Standard mode if not enough Enhanced tracks
         if (tracks.length < this.MIN_TRACKS_DAILY) {
             console.log(`[LATE NIGHT MIX] Falling back to Standard mode`);
@@ -1416,14 +1601,20 @@ export class ProgrammaticPlaylistService {
                 include: { album: { select: { coverUrl: true } } },
                 take: 100,
             });
-            console.log(`[LATE NIGHT MIX] Standard mode: Found ${tracks.length} tracks`);
+            console.log(
+                `[LATE NIGHT MIX] Standard mode: Found ${tracks.length} tracks`
+            );
         }
-        
-        console.log(`[LATE NIGHT MIX] Total: ${tracks.length} tracks matching criteria`);
+
+        console.log(
+            `[LATE NIGHT MIX] Total: ${tracks.length} tracks matching criteria`
+        );
 
         // No fallback padding - if not enough truly mellow tracks, don't generate
         if (tracks.length < this.MIN_TRACKS_DAILY) {
-            console.log(`[LATE NIGHT MIX] FAILED: Only ${tracks.length} tracks (need ${this.MIN_TRACKS_DAILY})`);
+            console.log(
+                `[LATE NIGHT MIX] FAILED: Only ${tracks.length} tracks (need ${this.MIN_TRACKS_DAILY})`
+            );
             return null;
         }
 
@@ -1436,9 +1627,11 @@ export class ProgrammaticPlaylistService {
 
         // Determine if daily or weekly based on available tracks
         const isWeekly = tracks.length >= this.MIN_TRACKS_WEEKLY;
-        const trackLimit = isWeekly ? this.WEEKLY_TRACK_LIMIT : this.DAILY_TRACK_LIMIT;
+        const trackLimit = isWeekly
+            ? this.WEEKLY_TRACK_LIMIT
+            : this.DAILY_TRACK_LIMIT;
         const selectedTracks = shuffled.slice(0, trackLimit);
-        
+
         const coverUrls = selectedTracks
             .filter((t) => t.album.coverUrl)
             .slice(0, 4)
@@ -1480,7 +1673,7 @@ export class ProgrammaticPlaylistService {
         });
         tracks = enhancedTracks;
         console.log(`[HAPPY MIX] Enhanced mode: Found ${tracks.length} tracks`);
-        
+
         // Strategy 2: Standard mode fallback - valence/energy heuristics
         if (tracks.length < 15) {
             const standardTracks = await prisma.track.findMany({
@@ -1492,22 +1685,45 @@ export class ProgrammaticPlaylistService {
                 include: { album: { select: { coverUrl: true } } },
                 take: 100,
             });
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...standardTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[HAPPY MIX] After Standard fallback: ${tracks.length} tracks`);
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...standardTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[HAPPY MIX] After Standard fallback: ${tracks.length} tracks`
+            );
         }
 
         // Strategy 2: Fallback to upbeat/happy genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const happyGenres = ["pop", "funk", "disco", "soul", "reggae", "ska", "motown"];
-            const albumGenreTracks = await findTracksByGenrePatterns(happyGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[HAPPY MIX] After genre fallback: ${tracks.length} tracks`);
+            const happyGenres = [
+                "pop",
+                "funk",
+                "disco",
+                "soul",
+                "reggae",
+                "ska",
+                "motown",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                happyGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[HAPPY MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[HAPPY MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[HAPPY MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1558,8 +1774,10 @@ export class ProgrammaticPlaylistService {
             include: { album: { select: { coverUrl: true } } },
             take: 150,
         });
-        console.log(`[MELANCHOLY MIX] Enhanced mode: Found ${enhancedTracks.length} tracks`);
-        
+        console.log(
+            `[MELANCHOLY MIX] Enhanced mode: Found ${enhancedTracks.length} tracks`
+        );
+
         if (enhancedTracks.length >= 15) {
             tracks = enhancedTracks;
         } else {
@@ -1574,34 +1792,68 @@ export class ProgrammaticPlaylistService {
                 include: { album: { select: { coverUrl: true } } },
                 take: 150,
             });
-            console.log(`[MELANCHOLY MIX] Standard mode: Found ${audioTracks.length} low-valence tracks`);
+            console.log(
+                `[MELANCHOLY MIX] Standard mode: Found ${audioTracks.length} low-valence tracks`
+            );
 
             // Further filter: prefer minor key OR sad mood tags
             tracks = audioTracks.filter((t) => {
                 const hasMinorKey = t.keyScale === "minor";
                 const hasSadTags = t.moodTags?.some((tag: string) =>
-                    ["sad", "melancholic", "melancholy", "moody", "atmospheric"].includes(tag.toLowerCase())
+                    [
+                        "sad",
+                        "melancholic",
+                        "melancholy",
+                        "moody",
+                        "atmospheric",
+                    ].includes(tag.toLowerCase())
                 );
                 const hasLastfmSadTags = t.lastfmTags?.some((tag: string) =>
-                    ["sad", "melancholic", "melancholy", "depressing", "emotional", "heartbreak"].includes(tag.toLowerCase())
+                    [
+                        "sad",
+                        "melancholic",
+                        "melancholy",
+                        "depressing",
+                        "emotional",
+                        "heartbreak",
+                    ].includes(tag.toLowerCase())
                 );
                 return hasMinorKey || hasSadTags || hasLastfmSadTags;
             });
-            console.log(`[MELANCHOLY MIX] After tag filter: ${tracks.length} tracks`);
+            console.log(
+                `[MELANCHOLY MIX] After tag filter: ${tracks.length} tracks`
+            );
         }
 
         // Strategy 2: Fallback to sad/emotional genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const sadGenres = ["blues", "soul", "ballad", "singer-songwriter", "slowcore", "sadcore"];
-            const albumGenreTracks = await findTracksByGenrePatterns(sadGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[MELANCHOLY MIX] After genre fallback: ${tracks.length} tracks`);
+            const sadGenres = [
+                "blues",
+                "soul",
+                "ballad",
+                "singer-songwriter",
+                "slowcore",
+                "sadcore",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                sadGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[MELANCHOLY MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         // Require minimum 15 tracks for a meaningful playlist
         if (tracks.length < 15) {
-            console.log(`[MELANCHOLY MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[MELANCHOLY MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1667,19 +1919,39 @@ export class ProgrammaticPlaylistService {
             take: 100,
         });
         tracks = audioTracks;
-        console.log(`[DANCE FLOOR MIX] Found ${tracks.length} tracks from audio analysis`);
+        console.log(
+            `[DANCE FLOOR MIX] Found ${tracks.length} tracks from audio analysis`
+        );
 
         // Strategy 2: Fallback to dance genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const danceGenres = ["dance", "electronic", "edm", "house", "disco", "techno", "pop"];
-            const albumGenreTracks = await findTracksByGenrePatterns(danceGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[DANCE FLOOR MIX] After genre fallback: ${tracks.length} tracks`);
+            const danceGenres = [
+                "dance",
+                "electronic",
+                "edm",
+                "house",
+                "disco",
+                "techno",
+                "pop",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                danceGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[DANCE FLOOR MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[DANCE FLOOR MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[DANCE FLOOR MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1730,19 +2002,37 @@ export class ProgrammaticPlaylistService {
             take: 100,
         });
         tracks = audioTracks;
-        console.log(`[ACOUSTIC MIX] Found ${tracks.length} tracks from audio analysis`);
+        console.log(
+            `[ACOUSTIC MIX] Found ${tracks.length} tracks from audio analysis`
+        );
 
         // Strategy 2: Fallback to acoustic genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const acousticGenres = ["acoustic", "folk", "singer-songwriter", "unplugged", "indie folk"];
-            const albumGenreTracks = await findTracksByGenrePatterns(acousticGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[ACOUSTIC MIX] After genre fallback: ${tracks.length} tracks`);
+            const acousticGenres = [
+                "acoustic",
+                "folk",
+                "singer-songwriter",
+                "unplugged",
+                "indie folk",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                acousticGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[ACOUSTIC MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[ACOUSTIC MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[ACOUSTIC MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1793,19 +2083,38 @@ export class ProgrammaticPlaylistService {
             take: 100,
         });
         tracks = audioTracks;
-        console.log(`[INSTRUMENTAL MIX] Found ${tracks.length} tracks from audio analysis`);
+        console.log(
+            `[INSTRUMENTAL MIX] Found ${tracks.length} tracks from audio analysis`
+        );
 
         // Strategy 2: Fallback to instrumental genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const instrumentalGenres = ["instrumental", "classical", "soundtrack", "score", "ambient", "post-rock"];
-            const albumGenreTracks = await findTracksByGenrePatterns(instrumentalGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[INSTRUMENTAL MIX] After genre fallback: ${tracks.length} tracks`);
+            const instrumentalGenres = [
+                "instrumental",
+                "classical",
+                "soundtrack",
+                "score",
+                "ambient",
+                "post-rock",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                instrumentalGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[INSTRUMENTAL MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[INSTRUMENTAL MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[INSTRUMENTAL MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -1900,7 +2209,16 @@ export class ProgrammaticPlaylistService {
         const taggedTracks = await prisma.track.findMany({
             where: {
                 OR: [
-                    { lastfmTags: { hasSome: ["driving", "road trip", "travel", "summer"] } },
+                    {
+                        lastfmTags: {
+                            hasSome: [
+                                "driving",
+                                "road trip",
+                                "travel",
+                                "summer",
+                            ],
+                        },
+                    },
                     { moodTags: { hasSome: ["energetic", "upbeat", "happy"] } },
                 ],
             },
@@ -1921,22 +2239,43 @@ export class ProgrammaticPlaylistService {
                 include: { album: { select: { coverUrl: true } } },
                 take: 100,
             });
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...audioTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[ROAD TRIP MIX] After audio fallback: ${tracks.length} tracks`);
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...audioTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[ROAD TRIP MIX] After audio fallback: ${tracks.length} tracks`
+            );
         }
 
         // Strategy 3: Fallback to upbeat rock/pop genres (using helper for proper JSON array handling)
         if (tracks.length < 15) {
-            const roadTripGenres = ["rock", "pop", "indie", "alternative", "classic rock"];
-            const albumGenreTracks = await findTracksByGenrePatterns(roadTripGenres, 100);
-            const existingIds = new Set(tracks.map(t => t.id));
-            tracks = [...tracks, ...albumGenreTracks.filter(t => !existingIds.has(t.id))];
-            console.log(`[ROAD TRIP MIX] After genre fallback: ${tracks.length} tracks`);
+            const roadTripGenres = [
+                "rock",
+                "pop",
+                "indie",
+                "alternative",
+                "classic rock",
+            ];
+            const albumGenreTracks = await findTracksByGenrePatterns(
+                roadTripGenres,
+                100
+            );
+            const existingIds = new Set(tracks.map((t) => t.id));
+            tracks = [
+                ...tracks,
+                ...albumGenreTracks.filter((t) => !existingIds.has(t.id)),
+            ];
+            console.log(
+                `[ROAD TRIP MIX] After genre fallback: ${tracks.length} tracks`
+            );
         }
 
         if (tracks.length < 15) {
-            console.log(`[ROAD TRIP MIX] FAILED: Only ${tracks.length} tracks found`);
+            console.log(
+                `[ROAD TRIP MIX] FAILED: Only ${tracks.length} tracks found`
+            );
             return null;
         }
 
@@ -2002,7 +2341,15 @@ export class ProgrammaticPlaylistService {
                         acousticness: { gte: 0.5 },
                     },
                     {
-                        lastfmTags: { hasSome: ["relaxed", "calm", "peaceful", "chill", "sunday"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "relaxed",
+                                "calm",
+                                "peaceful",
+                                "chill",
+                                "sunday",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2045,7 +2392,14 @@ export class ProgrammaticPlaylistService {
                         valence: { gte: 0.5 },
                     },
                     {
-                        lastfmTags: { hasSome: ["motivation", "uplifting", "energetic", "happy"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "motivation",
+                                "uplifting",
+                                "energetic",
+                                "happy",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2088,7 +2442,9 @@ export class ProgrammaticPlaylistService {
                         energy: { gte: 0.6 },
                     },
                     {
-                        lastfmTags: { hasSome: ["party", "dance", "fun", "groovy"] },
+                        lastfmTags: {
+                            hasSome: ["party", "dance", "fun", "groovy"],
+                        },
                     },
                 ],
             },
@@ -2153,7 +2509,14 @@ export class ProgrammaticPlaylistService {
                         ],
                     },
                     {
-                        lastfmTags: { hasSome: ["sad", "melancholic", "heartbreak", "emotional"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "sad",
+                                "melancholic",
+                                "heartbreak",
+                                "emotional",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2201,7 +2564,14 @@ export class ProgrammaticPlaylistService {
                         ],
                     },
                     {
-                        lastfmTags: { hasSome: ["empowering", "confident", "uplifting", "anthemic"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "empowering",
+                                "confident",
+                                "uplifting",
+                                "anthemic",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2242,16 +2612,22 @@ export class ProgrammaticPlaylistService {
                 analysisStatus: "completed",
                 OR: [
                     {
-                        AND: [
-                            { keyScale: "minor" },
-                            { energy: { gte: 0.65 } },
-                        ],
+                        AND: [{ keyScale: "minor" }, { energy: { gte: 0.65 } }],
                     },
                     {
-                        moodTags: { hasSome: ["aggressive", "dark", "intense"] },
+                        moodTags: {
+                            hasSome: ["aggressive", "dark", "intense"],
+                        },
                     },
                     {
-                        lastfmTags: { hasSome: ["dark", "aggressive", "intense", "powerful"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "dark",
+                                "aggressive",
+                                "intense",
+                                "powerful",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2452,7 +2828,9 @@ export class ProgrammaticPlaylistService {
                         ],
                     },
                     {
-                        lastfmTags: { hasSome: ["warm", "sunset", "dreamy", "peaceful"] },
+                        lastfmTags: {
+                            hasSome: ["warm", "sunset", "dreamy", "peaceful"],
+                        },
                     },
                 ],
             },
@@ -2541,7 +2919,14 @@ export class ProgrammaticPlaylistService {
                         ],
                     },
                     {
-                        lastfmTags: { hasSome: ["emotional", "heartbreak", "feelings", "vulnerable"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "emotional",
+                                "heartbreak",
+                                "feelings",
+                                "vulnerable",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2689,7 +3074,14 @@ export class ProgrammaticPlaylistService {
                         ],
                     },
                     {
-                        lastfmTags: { hasSome: ["dreamy", "aesthetic", "cinematic", "romantic"] },
+                        lastfmTags: {
+                            hasSome: [
+                                "dreamy",
+                                "aesthetic",
+                                "cinematic",
+                                "romantic",
+                            ],
+                        },
                     },
                 ],
             },
@@ -2823,13 +3215,13 @@ export class ProgrammaticPlaylistService {
                     none: {},
                 },
             },
-            include: { 
-                album: { 
-                    select: { 
+            include: {
+                album: {
+                    select: {
                         coverUrl: true,
                         artist: { select: { id: true } },
-                    } 
-                } 
+                    },
+                },
             },
             take: 200,
         });
@@ -2843,13 +3235,13 @@ export class ProgrammaticPlaylistService {
                 },
                 take: 200,
             });
-            
+
             const filtered = lowPlayTracks
-                .filter(t => t._count.plays <= 3)
-                .map(t => ({ ...t, album: t.album }));
-            
+                .filter((t) => t._count.plays <= 3)
+                .map((t) => ({ ...t, album: t.album }));
+
             if (filtered.length < 15) return null;
-            
+
             const shuffled = randomSample(filtered, this.WEEKLY_TRACK_LIMIT);
             const coverUrls = shuffled
                 .filter((t) => t.album.coverUrl)
@@ -2895,8 +3287,21 @@ export class ProgrammaticPlaylistService {
         today: string
     ): Promise<ProgrammaticMix | null> {
         // Circle of fifths order
-        const keyOrder = ["C", "G", "D", "A", "E", "B", "F#", "Db", "Ab", "Eb", "Bb", "F"];
-        
+        const keyOrder = [
+            "C",
+            "G",
+            "D",
+            "A",
+            "E",
+            "B",
+            "F#",
+            "Db",
+            "Ab",
+            "Eb",
+            "Bb",
+            "F",
+        ];
+
         const tracks = await prisma.track.findMany({
             where: {
                 analysisStatus: "completed",
@@ -2920,12 +3325,19 @@ export class ProgrammaticPlaylistService {
         const journey: typeof tracks = [];
         const seed = getSeededRandom(`key-journey-${today}`);
         let seedVal = seed;
-        
+
         for (const key of keyOrder) {
             const keyTracks = byKey.get(key) || [];
-            if (keyTracks.length > 0 && journey.length < this.WEEKLY_TRACK_LIMIT) {
+            if (
+                keyTracks.length > 0 &&
+                journey.length < this.WEEKLY_TRACK_LIMIT
+            ) {
                 // Pick 1-2 tracks from each key
-                const count = Math.min(2, keyTracks.length, this.WEEKLY_TRACK_LIMIT - journey.length);
+                const count = Math.min(
+                    2,
+                    keyTracks.length,
+                    this.WEEKLY_TRACK_LIMIT - journey.length
+                );
                 seedVal = (seedVal * 9301 + 49297) % 233280;
                 const shuffled = keyTracks.sort(() => {
                     seedVal = (seedVal * 9301 + 49297) % 233280;
@@ -2975,14 +3387,16 @@ export class ProgrammaticPlaylistService {
 
         // Sort by BPM
         const sorted = [...tracks].sort((a, b) => (a.bpm || 0) - (b.bpm || 0));
-        
+
         // Build an arc: slow → fast → slow
-        const slow = sorted.filter(t => (t.bpm || 0) < 100);
-        const medium = sorted.filter(t => (t.bpm || 0) >= 100 && (t.bpm || 0) < 130);
-        const fast = sorted.filter(t => (t.bpm || 0) >= 130);
+        const slow = sorted.filter((t) => (t.bpm || 0) < 100);
+        const medium = sorted.filter(
+            (t) => (t.bpm || 0) >= 100 && (t.bpm || 0) < 130
+        );
+        const fast = sorted.filter((t) => (t.bpm || 0) >= 130);
 
         const flow: typeof tracks = [];
-        
+
         // Intro: 4 slow tracks
         flow.push(...randomSample(slow, Math.min(4, slow.length)));
         // Build: 4 medium tracks
@@ -2990,9 +3404,19 @@ export class ProgrammaticPlaylistService {
         // Peak: 5 fast tracks
         flow.push(...randomSample(fast, Math.min(6, fast.length)));
         // Cool down: 3 medium tracks
-        flow.push(...randomSample(medium.filter(t => !flow.includes(t)), Math.min(3, medium.length)));
+        flow.push(
+            ...randomSample(
+                medium.filter((t) => !flow.includes(t)),
+                Math.min(3, medium.length)
+            )
+        );
         // Outro: 3 slow tracks
-        flow.push(...randomSample(slow.filter(t => !flow.includes(t)), Math.min(2, slow.length)));
+        flow.push(
+            ...randomSample(
+                slow.filter((t) => !flow.includes(t)),
+                Math.min(2, slow.length)
+            )
+        );
 
         if (flow.length < 15) return null;
 
@@ -3129,44 +3553,152 @@ export class ProgrammaticPlaylistService {
         };
 
         // Check if any ML mood params are being used
-        const mlMoodParams = ['moodHappy', 'moodSad', 'moodRelaxed', 'moodAggressive', 'moodParty', 'moodAcoustic', 'moodElectronic'];
-        const usesMLMoods = mlMoodParams.some(key => params[key as keyof typeof params] !== undefined);
+        const mlMoodParams = [
+            "moodHappy",
+            "moodSad",
+            "moodRelaxed",
+            "moodAggressive",
+            "moodParty",
+            "moodAcoustic",
+            "moodElectronic",
+        ];
+        const usesMLMoods = mlMoodParams.some(
+            (key) => params[key as keyof typeof params] !== undefined
+        );
 
-        // If using ML moods, require enhanced analysis mode
+        // First, check how many enhanced tracks we have
+        let useEnhancedMode = false;
         if (usesMLMoods) {
-            where.analysisMode = "enhanced";
+            const enhancedCount = await prisma.track.count({
+                where: {
+                    analysisStatus: "completed",
+                    analysisMode: "enhanced",
+                },
+            });
+
+            // Only require enhanced mode if we have at least 15 enhanced tracks
+            if (enhancedCount >= 15) {
+                where.analysisMode = "enhanced";
+                useEnhancedMode = true;
+            } else {
+                // Not enough enhanced tracks - convert ML mood params to basic audio feature equivalents
+                console.log(
+                    `[MoodMixer] Only ${enhancedCount} enhanced tracks, falling back to basic features`
+                );
+
+                // Map ML moods to basic audio features for fallback
+                // This provides approximate matching when enhanced mode isn't available
+                if (params.moodHappy) {
+                    where.valence = where.valence || {};
+                    if (params.moodHappy.min !== undefined)
+                        where.valence.gte = Math.max(
+                            where.valence.gte || 0,
+                            params.moodHappy.min
+                        );
+                }
+                if (params.moodSad) {
+                    where.valence = where.valence || {};
+                    if (params.moodSad.min !== undefined)
+                        where.valence.lte = Math.min(
+                            where.valence.lte || 1,
+                            1 - params.moodSad.min
+                        );
+                }
+                if (params.moodRelaxed) {
+                    where.energy = where.energy || {};
+                    if (params.moodRelaxed.min !== undefined)
+                        where.energy.lte = Math.min(
+                            where.energy.lte || 1,
+                            1 - params.moodRelaxed.min * 0.5
+                        );
+                }
+                if (params.moodAggressive) {
+                    where.energy = where.energy || {};
+                    if (params.moodAggressive.min !== undefined)
+                        where.energy.gte = Math.max(
+                            where.energy.gte || 0,
+                            params.moodAggressive.min
+                        );
+                }
+                if (params.moodParty) {
+                    where.danceability = where.danceability || {};
+                    if (params.moodParty.min !== undefined)
+                        where.danceability.gte = Math.max(
+                            where.danceability.gte || 0,
+                            params.moodParty.min
+                        );
+                }
+                // Clear the ML mood params since we're falling back
+                delete params.moodHappy;
+                delete params.moodSad;
+                delete params.moodRelaxed;
+                delete params.moodAggressive;
+                delete params.moodParty;
+                delete params.moodAcoustic;
+                delete params.moodElectronic;
+            }
         }
 
-        // Basic audio feature filters
+        // Basic audio feature filters - merge with any existing from fallback
         if (params.valence) {
-            where.valence = {};
-            if (params.valence.min !== undefined) where.valence.gte = params.valence.min;
-            if (params.valence.max !== undefined) where.valence.lte = params.valence.max;
+            where.valence = where.valence || {};
+            if (params.valence.min !== undefined)
+                where.valence.gte = Math.max(
+                    where.valence.gte || 0,
+                    params.valence.min
+                );
+            if (params.valence.max !== undefined)
+                where.valence.lte = Math.min(
+                    where.valence.lte ?? 1,
+                    params.valence.max
+                );
         }
         if (params.energy) {
-            where.energy = {};
-            if (params.energy.min !== undefined) where.energy.gte = params.energy.min;
-            if (params.energy.max !== undefined) where.energy.lte = params.energy.max;
+            where.energy = where.energy || {};
+            if (params.energy.min !== undefined)
+                where.energy.gte = Math.max(
+                    where.energy.gte || 0,
+                    params.energy.min
+                );
+            if (params.energy.max !== undefined)
+                where.energy.lte = Math.min(
+                    where.energy.lte ?? 1,
+                    params.energy.max
+                );
         }
         if (params.danceability) {
-            where.danceability = {};
-            if (params.danceability.min !== undefined) where.danceability.gte = params.danceability.min;
-            if (params.danceability.max !== undefined) where.danceability.lte = params.danceability.max;
+            where.danceability = where.danceability || {};
+            if (params.danceability.min !== undefined)
+                where.danceability.gte = Math.max(
+                    where.danceability.gte || 0,
+                    params.danceability.min
+                );
+            if (params.danceability.max !== undefined)
+                where.danceability.lte = Math.min(
+                    where.danceability.lte ?? 1,
+                    params.danceability.max
+                );
         }
         if (params.acousticness) {
             where.acousticness = {};
-            if (params.acousticness.min !== undefined) where.acousticness.gte = params.acousticness.min;
-            if (params.acousticness.max !== undefined) where.acousticness.lte = params.acousticness.max;
+            if (params.acousticness.min !== undefined)
+                where.acousticness.gte = params.acousticness.min;
+            if (params.acousticness.max !== undefined)
+                where.acousticness.lte = params.acousticness.max;
         }
         if (params.instrumentalness) {
             where.instrumentalness = {};
-            if (params.instrumentalness.min !== undefined) where.instrumentalness.gte = params.instrumentalness.min;
-            if (params.instrumentalness.max !== undefined) where.instrumentalness.lte = params.instrumentalness.max;
+            if (params.instrumentalness.min !== undefined)
+                where.instrumentalness.gte = params.instrumentalness.min;
+            if (params.instrumentalness.max !== undefined)
+                where.instrumentalness.lte = params.instrumentalness.max;
         }
         if (params.arousal) {
             where.arousal = {};
-            if (params.arousal.min !== undefined) where.arousal.gte = params.arousal.min;
-            if (params.arousal.max !== undefined) where.arousal.lte = params.arousal.max;
+            if (params.arousal.min !== undefined)
+                where.arousal.gte = params.arousal.min;
+            if (params.arousal.max !== undefined)
+                where.arousal.lte = params.arousal.max;
         }
         if (params.bpm) {
             where.bpm = {};
@@ -3180,38 +3712,52 @@ export class ProgrammaticPlaylistService {
         // ML mood prediction filters
         if (params.moodHappy) {
             where.moodHappy = {};
-            if (params.moodHappy.min !== undefined) where.moodHappy.gte = params.moodHappy.min;
-            if (params.moodHappy.max !== undefined) where.moodHappy.lte = params.moodHappy.max;
+            if (params.moodHappy.min !== undefined)
+                where.moodHappy.gte = params.moodHappy.min;
+            if (params.moodHappy.max !== undefined)
+                where.moodHappy.lte = params.moodHappy.max;
         }
         if (params.moodSad) {
             where.moodSad = {};
-            if (params.moodSad.min !== undefined) where.moodSad.gte = params.moodSad.min;
-            if (params.moodSad.max !== undefined) where.moodSad.lte = params.moodSad.max;
+            if (params.moodSad.min !== undefined)
+                where.moodSad.gte = params.moodSad.min;
+            if (params.moodSad.max !== undefined)
+                where.moodSad.lte = params.moodSad.max;
         }
         if (params.moodRelaxed) {
             where.moodRelaxed = {};
-            if (params.moodRelaxed.min !== undefined) where.moodRelaxed.gte = params.moodRelaxed.min;
-            if (params.moodRelaxed.max !== undefined) where.moodRelaxed.lte = params.moodRelaxed.max;
+            if (params.moodRelaxed.min !== undefined)
+                where.moodRelaxed.gte = params.moodRelaxed.min;
+            if (params.moodRelaxed.max !== undefined)
+                where.moodRelaxed.lte = params.moodRelaxed.max;
         }
         if (params.moodAggressive) {
             where.moodAggressive = {};
-            if (params.moodAggressive.min !== undefined) where.moodAggressive.gte = params.moodAggressive.min;
-            if (params.moodAggressive.max !== undefined) where.moodAggressive.lte = params.moodAggressive.max;
+            if (params.moodAggressive.min !== undefined)
+                where.moodAggressive.gte = params.moodAggressive.min;
+            if (params.moodAggressive.max !== undefined)
+                where.moodAggressive.lte = params.moodAggressive.max;
         }
         if (params.moodParty) {
             where.moodParty = {};
-            if (params.moodParty.min !== undefined) where.moodParty.gte = params.moodParty.min;
-            if (params.moodParty.max !== undefined) where.moodParty.lte = params.moodParty.max;
+            if (params.moodParty.min !== undefined)
+                where.moodParty.gte = params.moodParty.min;
+            if (params.moodParty.max !== undefined)
+                where.moodParty.lte = params.moodParty.max;
         }
         if (params.moodAcoustic) {
             where.moodAcoustic = {};
-            if (params.moodAcoustic.min !== undefined) where.moodAcoustic.gte = params.moodAcoustic.min;
-            if (params.moodAcoustic.max !== undefined) where.moodAcoustic.lte = params.moodAcoustic.max;
+            if (params.moodAcoustic.min !== undefined)
+                where.moodAcoustic.gte = params.moodAcoustic.min;
+            if (params.moodAcoustic.max !== undefined)
+                where.moodAcoustic.lte = params.moodAcoustic.max;
         }
         if (params.moodElectronic) {
             where.moodElectronic = {};
-            if (params.moodElectronic.min !== undefined) where.moodElectronic.gte = params.moodElectronic.min;
-            if (params.moodElectronic.max !== undefined) where.moodElectronic.lte = params.moodElectronic.max;
+            if (params.moodElectronic.min !== undefined)
+                where.moodElectronic.gte = params.moodElectronic.min;
+            if (params.moodElectronic.max !== undefined)
+                where.moodElectronic.lte = params.moodElectronic.max;
         }
 
         const tracks = await prisma.track.findMany({

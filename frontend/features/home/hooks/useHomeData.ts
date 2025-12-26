@@ -5,10 +5,10 @@
  * and providing refresh functionality for mixes.
  */
 
-import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/lib/auth-context';
-import { toast } from 'sonner';
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 import type {
     Artist,
     ListenedItem,
@@ -16,7 +16,7 @@ import type {
     Audiobook,
     Mix,
     PopularArtist,
-} from '../types';
+} from "../types";
 import {
     useRecentlyListenedQuery,
     useRecentlyAddedQuery,
@@ -28,7 +28,7 @@ import {
     useRefreshMixesMutation,
     useBrowseAllQuery,
     queryKeys,
-} from '@/hooks/useQueries';
+} from "@/hooks/useQueries";
 
 interface PlaylistPreview {
     id: string;
@@ -81,27 +81,38 @@ export function useHomeData(): UseHomeDataReturn {
     const queryClient = useQueryClient();
 
     // Listen for mixes-updated event (fired when user saves mood preferences)
+    // Use refetchQueries instead of invalidateQueries to force immediate UI update
     useEffect(() => {
         const handleMixesUpdated = () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.mixes() });
+            // refetchQueries forces immediate refetch, unlike invalidateQueries which only marks stale
+            queryClient.refetchQueries({ queryKey: queryKeys.mixes() });
         };
 
-        window.addEventListener('mixes-updated', handleMixesUpdated);
-        return () => window.removeEventListener('mixes-updated', handleMixesUpdated);
+        window.addEventListener("mixes-updated", handleMixesUpdated);
+        return () =>
+            window.removeEventListener("mixes-updated", handleMixesUpdated);
     }, [queryClient]);
 
     // React Query hooks - these automatically handle caching, refetching, and loading states
-    const { data: recentlyListenedData, isLoading: isLoadingListened } = useRecentlyListenedQuery(10);
-    const { data: recentlyAddedData, isLoading: isLoadingAdded } = useRecentlyAddedQuery(10);
-    const { data: recommendedData, isLoading: isLoadingRecommended } = useRecommendationsQuery(10);
+    const { data: recentlyListenedData, isLoading: isLoadingListened } =
+        useRecentlyListenedQuery(10);
+    const { data: recentlyAddedData, isLoading: isLoadingAdded } =
+        useRecentlyAddedQuery(10);
+    const { data: recommendedData, isLoading: isLoadingRecommended } =
+        useRecommendationsQuery(10);
     const { data: mixesData, isLoading: isLoadingMixes } = useMixesQuery();
-    const { data: popularData, isLoading: isLoadingPopular } = usePopularArtistsQuery(20);
-    const { data: podcastsData, isLoading: isLoadingPodcasts } = useTopPodcastsQuery(10);
-    const { data: audiobooksData, isLoading: isLoadingAudiobooks } = useAudiobooksQuery();
-    const { data: browseData, isLoading: isBrowseLoading } = useBrowseAllQuery();
+    const { data: popularData, isLoading: isLoadingPopular } =
+        usePopularArtistsQuery(20);
+    const { data: podcastsData, isLoading: isLoadingPodcasts } =
+        useTopPodcastsQuery(10);
+    const { data: audiobooksData, isLoading: isLoadingAudiobooks } =
+        useAudiobooksQuery();
+    const { data: browseData, isLoading: isBrowseLoading } =
+        useBrowseAllQuery();
 
     // Mutation for refreshing mixes
-    const { mutateAsync: refreshMixes, isPending: isRefreshingMixes } = useRefreshMixesMutation();
+    const { mutateAsync: refreshMixes, isPending: isRefreshingMixes } =
+        useRefreshMixesMutation();
 
     /**
      * Refresh mixes and update cache
@@ -109,10 +120,10 @@ export function useHomeData(): UseHomeDataReturn {
     const handleRefreshMixes = async () => {
         try {
             await refreshMixes();
-            toast.success('Mixes refreshed! Check out your new daily picks');
+            toast.success("Mixes refreshed! Check out your new daily picks");
         } catch (error) {
-            console.error('Failed to refresh mixes:', error);
-            toast.error('Failed to refresh mixes');
+            console.error("Failed to refresh mixes:", error);
+            toast.error("Failed to refresh mixes");
         }
     };
 
@@ -136,8 +147,12 @@ export function useHomeData(): UseHomeDataReturn {
         recommended: recommendedData?.artists || [],
         mixes: Array.isArray(mixesData) ? mixesData : [],
         popularArtists: popularData?.artists || [],
-        recentPodcasts: Array.isArray(podcastsData) ? podcastsData.slice(0, 10) : [],
-        recentAudiobooks: Array.isArray(audiobooksData) ? audiobooksData.slice(0, 10) : [],
+        recentPodcasts: Array.isArray(podcastsData)
+            ? podcastsData.slice(0, 10)
+            : [],
+        recentAudiobooks: Array.isArray(audiobooksData)
+            ? audiobooksData.slice(0, 10)
+            : [],
         featuredPlaylists: browseData?.playlists || [],
         isLoading,
         isRefreshingMixes,

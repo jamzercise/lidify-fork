@@ -6,6 +6,7 @@ import {
     useState,
     useEffect,
     useRef,
+    useCallback,
     ReactNode,
     useMemo,
 } from "react";
@@ -18,13 +19,17 @@ interface AudioPlaybackContextType {
     targetSeekPosition: number | null;
     canSeek: boolean;
     downloadProgress: number | null; // 0-100 for downloading, null for not downloading
+    isSeekLocked: boolean; // True when a seek operation is in progress
     setIsPlaying: (playing: boolean) => void;
     setCurrentTime: (time: number) => void;
+    setCurrentTimeFromEngine: (time: number) => void; // For timeupdate events - respects seek lock
     setDuration: (duration: number) => void;
     setIsBuffering: (buffering: boolean) => void;
     setTargetSeekPosition: (position: number | null) => void;
     setCanSeek: (canSeek: boolean) => void;
     setDownloadProgress: (progress: number | null) => void;
+    lockSeek: (targetTime: number) => void; // Lock updates during seek
+    unlockSeek: () => void; // Unlock after seek completes
 }
 
 const AudioPlaybackContext = createContext<
@@ -42,11 +47,72 @@ export function AudioPlaybackProvider({ children }: { children: ReactNode }) {
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isBuffering, setIsBuffering] = useState(false);
-    const [targetSeekPosition, setTargetSeekPosition] = useState<number | null>(null);
+    const [targetSeekPosition, setTargetSeekPosition] = useState<number | null>(
+        null
+    );
     const [canSeek, setCanSeek] = useState(true); // Default true for music, false for uncached podcasts
-    const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+    const [downloadProgress, setDownloadProgress] = useState<number | null>(
+        null
+    );
     const [isHydrated, setIsHydrated] = useState(false);
     const lastSaveTimeRef = useRef<number>(0);
+
+    // Seek lock state - prevents stale timeupdate events from overwriting optimistic UI updates
+    const [isSeekLocked, setIsSeekLocked] = useState(false);
+    const seekTargetRef = useRef<number | null>(null);
+    const seekLockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Lock the seek state - ignores timeupdate events until audio catches up or timeout
+    const lockSeek = useCallback((targetTime: number) => {
+        setIsSeekLocked(true);
+        seekTargetRef.current = targetTime;
+
+        // Clear any existing timeout
+        if (seekLockTimeoutRef.current) {
+            clearTimeout(seekLockTimeoutRef.current);
+        }
+
+        // Auto-unlock after 500ms as a safety measure
+        seekLockTimeoutRef.current = setTimeout(() => {
+            setIsSeekLocked(false);
+            seekTargetRef.current = null;
+            seekLockTimeoutRef.current = null;
+        }, 500);
+    }, []);
+
+    // Unlock the seek state
+    const unlockSeek = useCallback(() => {
+        setIsSeekLocked(false);
+        seekTargetRef.current = null;
+        if (seekLockTimeoutRef.current) {
+            clearTimeout(seekLockTimeoutRef.current);
+            seekLockTimeoutRef.current = null;
+        }
+    }, []);
+
+    // setCurrentTimeFromEngine - for timeupdate events from Howler
+    // Respects seek lock to prevent stale updates causing flicker
+    const setCurrentTimeFromEngine = useCallback(
+        (time: number) => {
+            if (isSeekLocked && seekTargetRef.current !== null) {
+                // During seek, only accept updates that are close to our target
+                // This prevents old positions from briefly showing during seek
+                const isNearTarget = Math.abs(time - seekTargetRef.current) < 2;
+                if (!isNearTarget) {
+                    return; // Ignore stale position update
+                }
+                // Position is near target - seek completed, unlock
+                setIsSeekLocked(false);
+                seekTargetRef.current = null;
+                if (seekLockTimeoutRef.current) {
+                    clearTimeout(seekLockTimeoutRef.current);
+                    seekLockTimeoutRef.current = null;
+                }
+            }
+            setCurrentTime(time);
+        },
+        [isSeekLocked]
+    );
 
     // Restore currentTime from localStorage on mount
     // NOTE: Do NOT touch isPlaying here - let user actions control it
@@ -61,6 +127,15 @@ export function AudioPlaybackProvider({ children }: { children: ReactNode }) {
             console.error("[AudioPlayback] Failed to restore state:", error);
         }
         setIsHydrated(true);
+    }, []);
+
+    // Cleanup seek lock timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (seekLockTimeoutRef.current) {
+                clearTimeout(seekLockTimeoutRef.current);
+            }
+        };
     }, []);
 
     // Save currentTime to localStorage (throttled to avoid excessive writes)
@@ -92,15 +167,31 @@ export function AudioPlaybackProvider({ children }: { children: ReactNode }) {
             targetSeekPosition,
             canSeek,
             downloadProgress,
+            isSeekLocked,
             setIsPlaying,
             setCurrentTime,
+            setCurrentTimeFromEngine,
             setDuration,
             setIsBuffering,
             setTargetSeekPosition,
             setCanSeek,
             setDownloadProgress,
+            lockSeek,
+            unlockSeek,
         }),
-        [isPlaying, currentTime, duration, isBuffering, targetSeekPosition, canSeek, downloadProgress]
+        [
+            isPlaying,
+            currentTime,
+            duration,
+            isBuffering,
+            targetSeekPosition,
+            canSeek,
+            downloadProgress,
+            isSeekLocked,
+            setCurrentTimeFromEngine,
+            lockSeek,
+            unlockSeek,
+        ]
     );
 
     return (

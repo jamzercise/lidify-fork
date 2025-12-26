@@ -9,6 +9,7 @@ import { processDiscoverWeekly } from "./processors/discoverProcessor";
 import { processImageOptimization } from "./processors/imageProcessor";
 import { processValidation } from "./processors/validationProcessor";
 import { startUnifiedEnrichmentWorker, stopUnifiedEnrichmentWorker } from "./unifiedEnrichment";
+import { startMoodBucketWorker, stopMoodBucketWorker } from "./moodBucketWorker";
 import { downloadQueueManager } from "../services/downloadQueue";
 import { prisma } from "../utils/db";
 import { startDiscoverWeeklyCron, stopDiscoverWeeklyCron } from "./discoverCron";
@@ -75,6 +76,12 @@ downloadQueueManager.onUnavailableAlbum(async (info) => {
 // Handles: artist metadata, track tags (Last.fm), audio analysis queueing (Essentia)
 startUnifiedEnrichmentWorker().catch((err) => {
     console.error("Failed to start unified enrichment worker:", err);
+});
+
+// Start mood bucket worker
+// Assigns newly analyzed tracks to mood buckets for fast mood mix generation
+startMoodBucketWorker().catch((err) => {
+    console.error("Failed to start mood bucket worker:", err);
 });
 
 // Event handlers for scan queue
@@ -228,6 +235,9 @@ export async function shutdownWorkers(): Promise<void> {
 
     // Stop unified enrichment worker
     stopUnifiedEnrichmentWorker();
+
+    // Stop mood bucket worker
+    stopMoodBucketWorker();
 
     // Stop discover weekly cron
     stopDiscoverWeeklyCron();

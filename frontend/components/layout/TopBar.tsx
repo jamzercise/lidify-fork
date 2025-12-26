@@ -139,7 +139,7 @@ export function TopBar() {
     return (
         <header
             className="fixed top-0 left-0 right-0 bg-black flex items-center px-3 z-50"
-            style={{ height: isMobileOrTablet ? "52px" : "64px" }}
+            style={{ height: isMobileOrTablet ? "58px" : "64px" }}
         >
             {/* Mobile/Tablet Layout: Hamburger + Home + Search + Bell */}
             {isMobileOrTablet ? (
