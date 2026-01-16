@@ -245,11 +245,8 @@ export function TopBar() {
                                 height={32}
                                 className="group-hover:scale-105 transition-transform"
                             />
-                            <span className="text-xl font-semibold text-white">
-                                Lidify
-                            </span>
                         </Link>
-                        <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium text-white/40 bg-white/5 rounded border border-white/10">
+                        <span className="ml-2 px-1.5 py-0.5 text-[8px] font-medium text-white/40 bg-white/5 rounded border border-white/10 -mt-2.5">
                             v{APP_VERSION}
                         </span>
                     </div>
@@ -320,7 +317,7 @@ export function TopBar() {
                                     ? " text-green-400 "
                                     : hasFailedDownloads
                                     ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                                    : "bg-#0a0a0a text-white hover:bg-white/20"
+                                    : "bg-[#0a0a0a] text-white hover:bg-white/20"
                             )}
                             title={
                                 isPolling
