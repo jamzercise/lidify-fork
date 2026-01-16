@@ -33,16 +33,13 @@ export function useSoulseekSearch({
     );
 
     // Check if Soulseek is configured (has credentials)
+    // Use the public /soulseek/status endpoint instead of admin-only /system-settings
     useEffect(() => {
         const checkSoulseekStatus = async () => {
             try {
-                const settings = await api.getSystemSettings();
-                // Soulseek is enabled if both username and password are configured
-                setSoulseekEnabled(
-                    Boolean(
-                        settings.soulseekUsername && settings.soulseekPassword
-                    )
-                );
+                const status = await api.getSlskdStatus();
+                // The status endpoint returns { enabled: boolean, connected: boolean }
+                setSoulseekEnabled(Boolean(status.enabled));
             } catch (error) {
                 console.error("Failed to check Soulseek status:", error);
                 setSoulseekEnabled(false);
@@ -60,36 +57,49 @@ export function useSoulseekSearch({
             return;
         }
 
+        // Track if this effect has been cancelled
+        let cancelled = false;
         let pollInterval: NodeJS.Timeout | null = null;
+        let searchId: string | null = null;
 
         const timer = setTimeout(async () => {
+            if (cancelled) return;
+
             setIsSoulseekSearching(true);
             setIsSoulseekPolling(true);
 
             try {
-                const { searchId } = await api.searchSoulseek(query);
+                const response = await api.searchSoulseek(query);
+                if (cancelled) return;
+
+                searchId = response.searchId;
                 setSoulseekSearchId(searchId);
                 setSoulseekResults([]);
 
-                // Poll for results - limit to 5 for inline display
                 let pollCount = 0;
-                const maxPolls = 30; // Poll for up to 90 seconds
+                const maxPolls = 30;
 
-                // Wait 5 seconds before starting to poll (Soulseek is slow)
-                await new Promise((resolve) => setTimeout(resolve, 5000));
-                setIsSoulseekSearching(false); // Initial search request complete
+                // Wait 3 seconds before starting to poll
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+                if (cancelled) return;
+
+                setIsSoulseekSearching(false);
 
                 pollInterval = setInterval(async () => {
+                    if (cancelled) {
+                        if (pollInterval) clearInterval(pollInterval);
+                        return;
+                    }
+
                     try {
-                        const { results } = await api.getSoulseekResults(
-                            searchId
-                        );
+                        const { results } = await api.getSoulseekResults(searchId!);
+                        if (cancelled) return;
 
                         if (results && results.length > 0) {
                             setSoulseekResults(results);
-                            // If we have enough results, we can stop polling early
                             if (results.length >= 10) {
                                 if (pollInterval) clearInterval(pollInterval);
+                                pollInterval = null;
                                 setIsSoulseekPolling(false);
                             }
                         }
@@ -98,32 +108,31 @@ export function useSoulseekSearch({
 
                         if (pollCount >= maxPolls) {
                             if (pollInterval) clearInterval(pollInterval);
+                            pollInterval = null;
                             setIsSoulseekPolling(false);
                         }
                     } catch (error) {
                         console.error("Error polling Soulseek results:", error);
                         if (pollInterval) clearInterval(pollInterval);
+                        pollInterval = null;
                         setIsSoulseekPolling(false);
                     }
                 }, 2000);
             } catch (error) {
-                console.error("Soulseek search error:", error);
-                if (
-                    error instanceof Error &&
-                    error.message?.includes("not enabled")
-                ) {
-                    setSoulseekEnabled(false);
-                }
+                if (cancelled) return;
+                console.error("Error starting Soulseek search:", error);
                 setIsSoulseekSearching(false);
                 setIsSoulseekPolling(false);
             }
         }, 800);
 
         return () => {
+            cancelled = true;
             clearTimeout(timer);
             if (pollInterval) {
                 clearInterval(pollInterval);
             }
+            setIsSoulseekSearching(false);
             setIsSoulseekPolling(false);
         };
     }, [query, soulseekEnabled]);
@@ -162,7 +171,10 @@ export function useSoulseekSearch({
             }, 5000);
         } catch (error) {
             console.error("Download error:", error);
-            const message = error instanceof Error ? error.message : "Failed to start download";
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : "Failed to start download";
             toast.error(message);
             setDownloadingFiles((prev) => {
                 const newSet = new Set(prev);
