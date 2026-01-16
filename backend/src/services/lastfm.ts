@@ -8,6 +8,7 @@ import { fanartService } from "./fanart";
 import { deezerService } from "./deezer";
 import { rateLimiter } from "./rateLimiter";
 import { normalizeToArray } from "../utils/normalize";
+import { stripAlbumEdition } from "../utils/artistNormalization";
 
 interface SimilarArtist {
     name: string;
@@ -203,7 +204,31 @@ class LastFmService {
             logger.warn("Redis get error:", err);
         }
 
+        // Helper to normalize and cache album response
+        const normalizeAndCache = async (album: any, key: string) => {
+            if (!album) return null;
+            const normalized = {
+                ...album,
+                image: normalizeToArray(album.image),
+                tags: album.tags ? {
+                    ...album.tags,
+                    tag: normalizeToArray(album.tags.tag)
+                } : album.tags,
+                tracks: album.tracks ? {
+                    ...album.tracks,
+                    track: normalizeToArray(album.tracks.track)
+                } : album.tracks
+            };
+            try {
+                await redisClient.setEx(key, 2592000, JSON.stringify(normalized));
+            } catch (err) {
+                logger.warn("Redis set error:", err);
+            }
+            return normalized;
+        };
+
         try {
+            // Try original album name first
             const data = await this.request({
                 method: "album.getInfo",
                 artist: artistName,
@@ -212,42 +237,44 @@ class LastFmService {
                 format: "json",
             });
 
-            const album = data.album;
-
-            // Normalize arrays before caching/returning
-            if (album) {
-                const normalized = {
-                    ...album,
-                    image: normalizeToArray(album.image),
-                    tags: album.tags ? {
-                        ...album.tags,
-                        tag: normalizeToArray(album.tags.tag)
-                    } : album.tags,
-                    tracks: album.tracks ? {
-                        ...album.tracks,
-                        track: normalizeToArray(album.tracks.track)
-                    } : album.tracks
-                };
-
-                // Cache for 30 days
-                try {
-                    await redisClient.setEx(
-                        cacheKey,
-                        2592000,
-                        JSON.stringify(normalized)
-                    );
-                } catch (err) {
-                    logger.warn("Redis set error:", err);
-                }
-
-                return normalized;
+            if (data.album) {
+                return normalizeAndCache(data.album, cacheKey);
             }
+        } catch (error: unknown) {
+            // Only try stripped version for "not found" errors
+            const isNotFoundError =
+                error instanceof Error &&
+                'response' in error &&
+                (error as any).response?.data?.error === 6;
 
-            return album;
-        } catch (error) {
-            logger.error(`Last.fm album info error for ${albumName}:`, error);
+            if (isNotFoundError) {
+                const strippedAlbum = stripAlbumEdition(albumName);
+                if (strippedAlbum !== albumName && strippedAlbum.length > 2) {
+                    logger.debug(`Last.fm: Album "${albumName}" not found, trying "${strippedAlbum}"`);
+                    try {
+                        const fallbackData = await this.request({
+                            method: "album.getInfo",
+                            artist: artistName,
+                            album: strippedAlbum,
+                            api_key: this.apiKey,
+                            format: "json",
+                        });
+
+                        if (fallbackData.album) {
+                            return normalizeAndCache(fallbackData.album, cacheKey);
+                        }
+                    } catch (fallbackError: unknown) {
+                        logger.debug(`Last.fm: Fallback album "${strippedAlbum}" also not found`);
+                    }
+                }
+            } else {
+                const errorMsg = error instanceof Error ? error.message : String(error);
+                logger.error(`Last.fm album info error for ${albumName}: ${errorMsg}`);
+            }
             return null;
         }
+
+        return null;
     }
 
     async getTopAlbumsByTag(tag: string, limit = 20) {
