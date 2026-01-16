@@ -111,6 +111,41 @@ export function normalizeAlbumTitle(title: string): string {
 }
 
 /**
+ * Strip edition/version suffixes from album titles for better search matching
+ * "In A Time Lapse (Deluxe Edition)" → "In A Time Lapse"
+ * "Abbey Road (2019 Remaster)" → "Abbey Road"
+ * "Dark Side of the Moon [Remastered]" → "Dark Side of the Moon"
+ */
+export function stripAlbumEdition(title: string): string {
+    // Guard against ReDoS - skip regex for excessively long inputs
+    if (!title || title.length > 500) {
+        return title?.trim() || "";
+    }
+
+    return title
+        // Remove parenthetical edition/version markers
+        .replace(
+            /\s*\([^)]*(?:deluxe|remaster|expanded|anniversary|bonus|special|limited|collector|platinum|edition|version|original|soundtrack|motion picture|super deluxe|explicit|clean|mono|stereo|remix|live|acoustic|unplugged|sessions?|recording|import|japan|uk|us)\s*[^)]*\)\s*/gi,
+            ""
+        )
+        // Remove bracketed edition markers
+        .replace(
+            /\s*\[[^\]]*(?:deluxe|remaster|expanded|anniversary|bonus|special|limited|collector|platinum|edition|version|original|soundtrack|motion picture|super deluxe|explicit|clean|mono|stereo|remix|live|acoustic|unplugged|sessions?|recording|import|japan|uk|us)\s*[^\]]*\]\s*/gi,
+            ""
+        )
+        // Remove trailing dash content with edition keywords
+        .replace(
+            /\s*[-–—:]\s*(?:\d{4}\s+)?(?:deluxe|remaster|expanded|anniversary|bonus|special|limited|collector|platinum|edition|version|original|mono|stereo|remix|live|acoustic).*$/gi,
+            ""
+        )
+        // Remove trailing year in parentheses (often indicates remaster year)
+        .replace(/\s*\(\d{4}\)\s*$/, "")
+        // Clean up any double spaces or trailing whitespace
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+/**
  * Check if two artist names are similar enough to be considered the same
  * Uses fuzzy matching to catch typos like "the weeknd" vs "the weekend"
  * @param name1 First artist name
