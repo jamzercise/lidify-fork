@@ -840,8 +840,8 @@ router.get("/artists", async (req, res) => {
             `[Library] Found ${artistsWithoutImages.length} artists without images, fetching on-demand...`
         );
 
-        // Fetch images with concurrency limit of 5 simultaneous requests
-        const imageFetchPromises = artistsWithoutImages.map(async (artist) => {
+        // Function to fetch image for a single artist (not executed until called)
+        const fetchArtistImage = async (artist: typeof artistsWithoutImages[0]) => {
             let coverArt: string | null = null;
 
             logger.debug(
@@ -924,15 +924,18 @@ router.get("/artists", async (req, res) => {
             }
 
             return { artistId: artist.id, coverArt };
-        });
+        };
 
-        // Process in batches of 5 for concurrency control
+        // Process in batches of 5 for TRUE concurrency control
+        // (promises are created inside the loop, not upfront)
         const batchSize = 5;
         const fetchedImages = new Map<string, string | null>();
 
-        for (let i = 0; i < imageFetchPromises.length; i += batchSize) {
-            const batch = imageFetchPromises.slice(i, i + batchSize);
-            const results = await Promise.allSettled(batch);
+        for (let i = 0; i < artistsWithoutImages.length; i += batchSize) {
+            const batch = artistsWithoutImages.slice(i, i + batchSize);
+            const results = await Promise.allSettled(
+                batch.map((artist) => fetchArtistImage(artist))
+            );
 
             results.forEach((result) => {
                 if (result.status === "fulfilled" && result.value.coverArt) {
