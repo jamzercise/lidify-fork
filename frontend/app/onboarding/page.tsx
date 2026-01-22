@@ -355,7 +355,7 @@ export default function OnboardingPage() {
                                             <button
                                                 type="submit"
                                                 disabled={loading}
-                                                className="w-full py-3.5 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all disabled:opacity-50 disabled:cursor-not-allowed relative group overflow-hidden mt-8"
+                                                className="w-full py-3.5 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all disabled:opacity-50 disabled:cursor-not-allowed relative group overflow-hidden mt-8 focus:outline-none focus:ring-2 focus:ring-brand/30"
                                             >
                                                 <span className="relative z-10 flex items-center justify-center gap-2">
                                                     {loading ? (
@@ -556,14 +556,18 @@ export default function OnboardingPage() {
                                         <div className="flex gap-3 mt-8">
                                             <button
                                                 onClick={() => setStep(3)}
-                                                className="flex-1 bg-white/5 border border-white/10 text-white/70 font-medium py-3.5 rounded-lg hover:bg-white/10 transition-all"
+                                                onKeyDown={(e) => e.key === 'Enter' && setStep(3)}
+                                                tabIndex={0}
+                                                className="flex-1 bg-white/5 border border-white/10 text-white/70 font-medium py-3.5 rounded-lg hover:bg-white/10 transition-all focus:outline-none focus:ring-2 focus:ring-brand/30"
                                             >
                                                 Skip for Now
                                             </button>
                                             <button
                                                 onClick={handleNextStep}
+                                                onKeyDown={(e) => e.key === 'Enter' && !loading && handleNextStep()}
                                                 disabled={loading}
-                                                className="flex-1 py-3.5 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all disabled:opacity-50"
+                                                tabIndex={0}
+                                                className="flex-1 py-3.5 bg-[#fca200] text-black font-bold rounded-lg hover:bg-[#e69200] transition-all disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-brand/30"
                                             >
                                                 {loading
                                                     ? "Saving..."
@@ -711,11 +715,13 @@ export default function OnboardingPage() {
                                                         !enrichmentEnabled
                                                     )
                                                 }
+                                                onKeyDown={(e) => e.key === 'Enter' && setEnrichmentEnabled(!enrichmentEnabled)}
+                                                tabIndex={0}
                                                 className={`relative w-12 h-6 rounded-lg transition-all ${
                                                     enrichmentEnabled
                                                         ? "bg-[#fca200]"
                                                         : "bg-white/20"
-                                                }`}
+                                                } focus:outline-none focus:ring-2 focus:ring-brand/30`}
                                             >
                                                 <div
                                                     className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-lg transition-all shadow-lg ${
@@ -748,12 +754,20 @@ export default function OnboardingPage() {
                                                     );
                                                     router.push("/");
                                                 }}
+                                                onKeyDown={async (e) => {
+                                                    if (e.key === 'Enter') {
+                                                        await api.post("/onboarding/enrichment", { enabled: false });
+                                                        await api.post("/onboarding/complete");
+                                                        router.push("/");
+                                                    }
+                                                }}
                                                 className="flex-1 bg-white/5 border border-white/10 text-white/70 font-medium py-3.5 rounded-lg hover:bg-white/10 transition-all"
                                             >
                                                 Skip Enrichment
                                             </button>
                                             <button
                                                 onClick={handleNextStep}
+                                                onKeyDown={(e) => e.key === 'Enter' && !loading && handleNextStep()}
                                                 disabled={loading}
                                                 className="flex-1 py-3.5 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 relative group overflow-hidden"
                                             >
@@ -853,9 +867,11 @@ function IntegrationCard({
                     </div>
                     <button
                         onClick={onToggle}
+                        onKeyDown={(e) => e.key === 'Enter' && onToggle()}
+                        tabIndex={0}
                         className={`relative w-11 h-6 rounded-lg transition-all ${
                             enabled ? "bg-[#fca200]" : "bg-white/20"
-                        }`}
+                        } focus:outline-none focus:ring-2 focus:ring-brand/30`}
                     >
                         <div
                             className={`absolute top-0.5 left-0.5 w-5 h-5 bg-[#fca200] rounded-lg transition-all shadow-lg ${
@@ -914,6 +930,7 @@ function IntegrationCard({
                         )}
                         <button
                             onClick={onTest}
+                            onKeyDown={(e) => e.key === 'Enter' && !loading && !e.defaultPrevented && onTest()}
                             disabled={
                                 loading ||
                                 !url ||
@@ -921,7 +938,8 @@ function IntegrationCard({
                                     ? !apiKey
                                     : !username || !password)
                             }
-                            className="w-full bg-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            tabIndex={0}
+                            className="w-full bg-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand/30"
                         >
                             Test Connection
                         </button>
@@ -994,9 +1012,11 @@ function SoulseekCard({
                     </div>
                     <button
                         onClick={onToggle}
+                        onKeyDown={(e) => e.key === 'Enter' && onToggle()}
+                        tabIndex={0}
                         className={`relative w-11 h-6 rounded-lg transition-all ${
                             enabled ? "bg-[#fca200]" : "bg-white/20"
-                        }`}
+                        } focus:outline-none focus:ring-2 focus:ring-brand/30`}
                     >
                         <div
                             className={`absolute top-0.5 left-0.5 w-5 h-5 bg-[#fca200] rounded-lg transition-all shadow-lg ${
@@ -1035,8 +1055,10 @@ function SoulseekCard({
                         </p>
                         <button
                             onClick={onTest}
+                            onKeyDown={(e) => e.key === 'Enter' && !loading && username && password && onTest()}
                             disabled={loading || !username || !password}
-                            className="w-full bg-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            tabIndex={0}
+                            className="w-full bg-white/10 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-white/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand/30"
                         >
                             Test Connection
                         </button>
