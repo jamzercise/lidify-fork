@@ -93,7 +93,7 @@ class CLAPAnalyzer:
                 enable_fusion=False,
                 amodel='HTSAT-base'
             )
-            self.model.load_ckpt('music_audioset_epoch_15_esc_90.14.pt')
+            self.model.load_ckpt('/app/models/music_audioset_epoch_15_esc_90.14.pt')
 
             # Move to CPU explicitly (we don't use GPU in this service)
             self.model = self.model.eval()

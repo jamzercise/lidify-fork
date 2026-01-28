@@ -31,10 +31,11 @@ RUN mkdir -p /app/models
 
 # Download CLAP model at build time
 # Using music_audioset checkpoint for music-specific embeddings
-RUN python -c "import laion_clap; model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base'); model.load_ckpt('music_audioset_epoch_15_esc_90.14.pt'); print('CLAP model downloaded successfully')"
+RUN curl -L -o /app/models/music_audioset_epoch_15_esc_90.14.pt \
+    "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt"
 
-# Verify model exists and laion_clap works
-RUN python -c "import laion_clap; print('laion_clap import: OK')"
+# Verify model loads correctly
+RUN python -c "import laion_clap; model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-base'); model.load_ckpt('/app/models/music_audioset_epoch_15_esc_90.14.pt'); print('CLAP model verified successfully')"
 
 # Copy application code
 COPY analyzer.py .
