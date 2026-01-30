@@ -117,25 +117,13 @@ function CoverImage({
 }) {
     const [hasError, setHasError] = useState(false);
 
-    // Debug: log the incoming coverUrl
-    useEffect(() => {
-        console.log(`CoverImage for "${title}": coverUrl=${coverUrl}, albumId=${albumId}`);
-    }, [coverUrl, albumId, title]);
-
     const imgSrc = useMemo(() => {
-        // If we have a coverUrl, use it
         if (coverUrl) {
-            const url = api.getCoverArtUrl(coverUrl);
-            console.log(`  -> Using coverUrl: ${url}`);
-            return url;
+            return api.getCoverArtUrl(coverUrl);
         }
-        // Fallback to albumId-based URL
         if (albumId) {
-            const url = api.getCoverArtUrl(`native:albums/${albumId}.jpg`);
-            console.log(`  -> Using albumId fallback: ${url}`);
-            return url;
+            return api.getCoverArtUrl(`native:albums/${albumId}.jpg`);
         }
-        console.log(`  -> No image source available`);
         return null;
     }, [coverUrl, albumId]);
 
@@ -160,10 +148,7 @@ function CoverImage({
                 className="object-cover"
                 priority={priority}
                 unoptimized
-                onError={() => {
-                    console.log(`  -> Image load error for: ${imgSrc}`);
-                    setHasError(true);
-                }}
+                onError={() => setHasError(true)}
             />
         </div>
     );
@@ -521,9 +506,6 @@ export default function VibePage() {
             distance?: number;
         }
     ): Promise<TrackData> => {
-        // Debug: log what we receive from API
-        console.log(`fetchTrackWithFeatures: ${trackInfo.title}, coverUrl=${trackInfo.album.coverUrl}`);
-
         const incomingCover = trackInfo.album.coverUrl || trackInfo.album.coverArt || null;
 
         try {
