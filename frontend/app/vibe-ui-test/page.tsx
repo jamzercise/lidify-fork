@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/utils/cn";
 import { api } from "@/lib/api";
+import { useFeatures } from "@/lib/features-context";
 import Image from "next/image";
 import {
     Loader2,
@@ -485,6 +486,31 @@ function VibeSearchInput({
 // MAIN PAGE
 // ============================================
 export default function VibePage() {
+    const { vibeEmbeddings, loading: featuresLoading } = useFeatures();
+
+    if (featuresLoading) {
+        return <div className="p-8 text-gray-400">Loading...</div>;
+    }
+
+    if (!vibeEmbeddings) {
+        return (
+            <div className="p-8">
+                <h1 className="text-2xl font-bold text-white mb-4">Vibe Explorer</h1>
+                <div className="bg-gray-800 rounded-lg p-6 text-center">
+                    <p className="text-gray-300 mb-2">Feature not available</p>
+                    <p className="text-sm text-gray-500">
+                        Vibe similarity requires the CLAP analyzer service.
+                        Deploy with <code className="bg-gray-700 px-1 rounded">--profile vibe</code> to enable.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    return <VibePageContent />;
+}
+
+function VibePageContent() {
     const [libraryTracks, setLibraryTracks] = useState<LibraryTrack[]>([]);
     const [sourceTrack, setSourceTrack] = useState<TrackData | null>(null);
     const [similarTracks, setSimilarTracks] = useState<TrackData[]>([]);
