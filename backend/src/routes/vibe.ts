@@ -4,10 +4,11 @@ import { logger } from "../utils/logger";
 import { prisma } from "../utils/db";
 import { redisClient } from "../utils/redis";
 import { requireAuth } from "../middleware/auth";
+import { findSimilarTracks } from "../services/hybridSimilarity";
 
 const router = Router();
 
-interface SimilarTrackResult {
+interface TextSearchResult {
     id: string;
     title: string;
     duration: number;
@@ -22,7 +23,7 @@ interface SimilarTrackResult {
 
 /**
  * GET /api/vibe/similar/:trackId
- * Find tracks similar to a given track using CLAP embeddings
+ * Find tracks similar to a given track using hybrid similarity (CLAP + audio features)
  */
 router.get("/similar/:trackId", requireAuth, async (req, res) => {
     try {
@@ -32,67 +33,35 @@ router.get("/similar/:trackId", requireAuth, async (req, res) => {
             100
         );
 
-        // Check if source track has an embedding
-        const hasEmbedding = await prisma.$queryRaw<{ count: bigint }[]>`
-            SELECT COUNT(*) as count FROM track_embeddings WHERE track_id = ${trackId}
-        `;
+        const tracks = await findSimilarTracks(trackId, limit);
 
-        if (!hasEmbedding || Number(hasEmbedding[0]?.count) === 0) {
+        if (tracks.length === 0) {
             return res.status(404).json({
-                error: "Track not analyzed yet",
-                message: "This track has not been processed for vibe similarity",
+                error: "No similar tracks found",
+                message: "This track may not have been analyzed yet, or no analyzer is running",
             });
         }
 
-        // Query for similar tracks using pgvector cosine distance
-        // Using CTE to fetch source embedding once instead of twice
-        const similarTracks = await prisma.$queryRaw<SimilarTrackResult[]>`
-            WITH source_embedding AS (
-                SELECT embedding FROM track_embeddings WHERE track_id = ${trackId}
-            )
-            SELECT
-                t.id,
-                t.title,
-                t.duration,
-                t."trackNo",
-                te.embedding <=> (SELECT embedding FROM source_embedding) AS distance,
-                a.id as "albumId",
-                a.title as "albumTitle",
-                a."coverUrl" as "albumCoverUrl",
-                ar.id as "artistId",
-                ar.name as "artistName"
-            FROM track_embeddings te
-            JOIN "Track" t ON te.track_id = t.id
-            JOIN "Album" a ON t."albumId" = a.id
-            JOIN "Artist" ar ON a."artistId" = ar.id
-            WHERE te.track_id != ${trackId}
-            ORDER BY te.embedding <=> (SELECT embedding FROM source_embedding)
-            LIMIT ${limit}
-        `;
-
-        const tracks = similarTracks.map((row) => ({
-            id: row.id,
-            title: row.title,
-            duration: row.duration,
-            trackNo: row.trackNo,
-            distance: row.distance,
-            album: {
-                id: row.albumId,
-                title: row.albumTitle,
-                coverUrl: row.albumCoverUrl,
-            },
-            artist: {
-                id: row.artistId,
-                name: row.artistName,
-            },
-        }));
-
         res.json({
             sourceTrackId: trackId,
-            tracks,
+            tracks: tracks.map((t) => ({
+                id: t.id,
+                title: t.title,
+                distance: t.distance,
+                similarity: t.similarity,
+                album: {
+                    id: t.albumId,
+                    title: t.albumTitle,
+                    coverUrl: t.albumCoverUrl,
+                },
+                artist: {
+                    id: t.artistId,
+                    name: t.artistName,
+                },
+            })),
         });
     } catch (error: any) {
-        logger.error("Vibe similar tracks error:", error);
+        logger.error("Hybrid similarity error:", error);
         res.status(500).json({ error: "Failed to find similar tracks" });
     }
 });
@@ -156,7 +125,7 @@ router.post("/search", requireAuth, async (req, res) => {
             const textEmbedding = await embeddingPromise;
 
             // Query for similar tracks using the text embedding
-            const similarTracks = await prisma.$queryRaw<SimilarTrackResult[]>`
+            const similarTracks = await prisma.$queryRaw<TextSearchResult[]>`
                 SELECT
                     t.id,
                     t.title,
