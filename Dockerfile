@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN apt-get install -y --no-install-recommends \
     postgresql-16 \
     postgresql-contrib-16 \
+    postgresql-16-pgvector \
     redis-server \
     supervisor \
     ffmpeg \
@@ -80,6 +81,35 @@ RUN echo "Downloading Essentia ML models for Enhanced vibe matching..." && \
 
 # Copy audio analyzer script
 COPY services/audio-analyzer/analyzer.py /app/audio-analyzer/
+
+# ============================================
+# CLAP ANALYZER SETUP (Vibe Similarity)
+# ============================================
+WORKDIR /app/audio-analyzer-clap
+
+# Install CLAP Python dependencies
+# Note: torch is large (~2GB) but required for CLAP embeddings
+RUN pip3 install --no-cache-dir --break-system-packages \
+    'laion-clap>=1.1.4' \
+    'torch>=2.0.0' \
+    'torchaudio>=2.0.0' \
+    'torchvision>=0.15.0' \
+    'librosa>=0.10.0' \
+    'transformers>=4.30.0' \
+    'pgvector>=0.2.0' \
+    'python-dotenv>=1.0.0' \
+    'requests>=2.31.0'
+
+# Copy CLAP analyzer script
+COPY services/audio-analyzer-clap/analyzer.py /app/audio-analyzer-clap/
+
+# Pre-download CLAP model (~600MB) during build to avoid runtime download
+# The analyzer expects the model at /app/models/music_audioset_epoch_15_esc_90.14.pt
+RUN echo "Downloading CLAP model for vibe similarity..." && \
+    curl -L --progress-bar -o /app/models/music_audioset_epoch_15_esc_90.14.pt \
+        "https://huggingface.co/lukewys/laion_clap/resolve/main/music_audioset_epoch_15_esc_90.14.pt" && \
+    echo "CLAP model downloaded successfully" && \
+    ls -lh /app/models/music_audioset_epoch_15_esc_90.14.pt
 
 # Create database readiness check script
 RUN cat > /app/wait-for-db.sh << 'EOF'
@@ -243,6 +273,19 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 environment=DATABASE_URL="postgresql://lidify:lidify@localhost:5432/lidify",REDIS_URL="redis://localhost:6379",MUSIC_PATH="/music",BATCH_SIZE="10",SLEEP_INTERVAL="5",MAX_ANALYZE_SECONDS="90"
 priority=50
+
+[program:audio-analyzer-clap]
+command=/bin/bash -c "/app/wait-for-db.sh 120 && cd /app/audio-analyzer-clap && python3 analyzer.py"
+autostart=true
+autorestart=unexpected
+startretries=3
+startsecs=30
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+environment=DATABASE_URL="postgresql://lidify:lidify@localhost:5432/lidify",REDIS_URL="redis://localhost:6379",MUSIC_PATH="/music",BACKEND_URL="http://localhost:3006",SLEEP_INTERVAL="5",NUM_WORKERS="1"
+priority=60
 EOF
 
 # Fix Windows line endings in supervisor config
@@ -329,6 +372,10 @@ gosu postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname = 'lidify'" | grep 
     gosu postgres psql -c "CREATE USER lidify WITH PASSWORD 'lidify';"
 gosu postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = 'lidify'" | grep -q 1 || \
     gosu postgres psql -c "CREATE DATABASE lidify OWNER lidify;"
+
+# Create pgvector extension as superuser (required before migrations)
+echo "Creating pgvector extension..."
+gosu postgres psql -d lidify -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 # Run Prisma migrations
 cd /app/backend
