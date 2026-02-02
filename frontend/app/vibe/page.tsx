@@ -6,6 +6,7 @@ import { cn } from "@/utils/cn";
 import { api } from "@/lib/api";
 import { useFeatures } from "@/lib/features-context";
 import { useAudio } from "@/lib/audio-context";
+import { useAudioState } from "@/lib/audio-state-context";
 import Image from "next/image";
 import {
     Loader2,
@@ -86,6 +87,27 @@ interface VibePlaylist {
 }
 
 type ViewMode = "comparison" | "search-results";
+
+// Convert TrackData to Track format for playback
+function trackDataToTrack(track: TrackData) {
+    return {
+        id: track.id,
+        title: track.title,
+        artist: { name: track.artist, id: track.artistId },
+        album: { title: track.album, id: track.albumId, coverArt: track.coverUrl || undefined },
+        duration: track.duration,
+        audioFeatures: {
+            energy: track.features.energy,
+            valence: track.features.valence,
+            arousal: track.features.arousal,
+            danceability: track.features.danceability,
+            instrumentalness: track.features.instrumentalness,
+            acousticness: track.features.acousticness,
+            bpm: track.features.bpm,
+            keyScale: track.features.key,
+        },
+    };
+}
 
 const AUDIO_FEATURES = [
     { key: "energy", label: "Energy", icon: Zap, color: "#f59e0b" },
@@ -713,7 +735,8 @@ export default function VibePage() {
 }
 
 function VibePageContent() {
-    const { playTracks, setVibeMode, setVibeSourceTrack } = useAudio();
+    const { playTracks } = useAudio();
+    const { setVibeMode, setVibeSourceFeatures, setVibeQueueIds } = useAudioState();
     const [libraryTracks, setLibraryTracks] = useState<LibraryTrack[]>([]);
     const [sourceTrack, setSourceTrack] = useState<TrackData | null>(null);
     const [similarTracks, setSimilarTracks] = useState<TrackData[]>([]);
@@ -739,28 +762,28 @@ function VibePageContent() {
     }, []);
 
     const playTrack = useCallback(async (track: TrackData) => {
-        await playTracks([track.id]);
+        await playTracks([trackDataToTrack(track)]);
     }, [playTracks]);
 
     const playAllSimilar = useCallback(async () => {
         if (similarTracks.length === 0) return;
 
-        // Set vibe mode with source track
-        if (sourceTrack) {
-            setVibeSourceTrack({
-                id: sourceTrack.id,
-                energy: sourceTrack.features.energy,
-                valence: sourceTrack.features.valence,
-                danceability: sourceTrack.features.danceability,
-                arousal: sourceTrack.features.arousal,
+        // Set vibe mode with source track (or first similar track if in search mode)
+        const vibeSource = sourceTrack || similarTracks[0];
+        if (vibeSource) {
+            setVibeSourceFeatures({
+                energy: vibeSource.features.energy,
+                valence: vibeSource.features.valence,
+                danceability: vibeSource.features.danceability,
+                arousal: vibeSource.features.arousal,
             });
+            const trackIds = similarTracks.map(t => t.id);
+            setVibeQueueIds(trackIds);
             setVibeMode(true);
+            const tracks = similarTracks.map(trackDataToTrack);
+            await playTracks(tracks, 0, true); // isVibeQueue = true
         }
-
-        // Queue all similar tracks
-        const trackIds = similarTracks.map(t => t.id);
-        await playTracks(trackIds);
-    }, [similarTracks, sourceTrack, playTracks, setVibeMode, setVibeSourceTrack]);
+    }, [similarTracks, sourceTrack, playTracks, setVibeMode, setVibeSourceFeatures, setVibeQueueIds]);
 
     const fetchTrackWithFeatures = useCallback(async (
         trackInfo: {
