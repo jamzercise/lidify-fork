@@ -157,7 +157,7 @@ function filterMoodTags(tags: string[]): string[] {
         .filter((t) => {
             if (MOOD_TAGS.has(t)) return true;
             for (const mood of MOOD_TAGS) {
-                if (t.includes(mood) || mood.includes(t)) return true;
+                if (t.includes(mood)) return true;
             }
             return false;
         })
@@ -338,37 +338,6 @@ export async function resetMoodTagsOnly(): Promise<{ count: number }> {
     });
 
     logger.debug(`[Enrichment] Reset mood tags for ${result.count} tracks`);
-    return { count: result.count };
-}
-
-/**
- * Reset only audio analysis (keeps artist metadata and mood tags intact)
- * Used when user wants to re-analyze audio files without touching metadata enrichment
- */
-export async function resetAudioAnalysisOnly(): Promise<{ count: number }> {
-    logger.debug("[Enrichment] Resetting ONLY audio analysis...");
-
-    // Clean up stale processing first
-    await audioAnalysisCleanupService.cleanupStaleProcessing();
-
-    const result = await prisma.track.updateMany({
-        where: {
-            OR: [
-                { analysisStatus: "completed" },
-                { analysisStatus: "failed" },
-                { analysisStatus: "processing" },
-            ],
-        },
-        data: {
-            analysisStatus: "pending",
-            analysisStartedAt: null,
-            analysisRetryCount: 0,
-        },
-    });
-
-    logger.debug(
-        `[Enrichment] Reset audio analysis for ${result.count} tracks`,
-    );
     return { count: result.count };
 }
 
@@ -989,15 +958,12 @@ async function queueVibeEmbeddings(): Promise<number> {
 
       for (const track of tracks) {
           try {
-              if (track.vibeAnalysisStatus === 'processing') {
-                  continue;
-              }
-              
               await prisma.track.update({
                   where: { id: track.id },
                   data: {
                       vibeAnalysisStatus: 'processing',
                       vibeAnalysisStartedAt: new Date(),
+                      vibeAnalysisStatusUpdatedAt: new Date(),
                   },
               });
               
@@ -1293,23 +1259,6 @@ export async function getEnrichmentProgress() {
 }
 
 /**
- * Trigger enrichment for a specific artist (used after new album added)
- */
-export async function enrichArtistNow(artistId: string) {
-    const artist = await prisma.artist.findUnique({
-        where: { id: artistId },
-    });
-
-    if (!artist) return;
-
-    logger.debug(`[Enrichment] Enriching artist: ${artist.name}`);
-    await enrichSimilarArtist(artist);
-}
-
-/**
- * Trigger enrichment for a specific album's tracks
- */
-/**
  * Trigger an immediate enrichment cycle (non-blocking)
  * Used when new tracks are added and we want to collect mood tags right away
  * instead of waiting for the 30s background interval
@@ -1329,50 +1278,6 @@ export async function triggerEnrichmentNow(): Promise<{
 
     return runEnrichmentCycle(false);
 }
-
-export async function enrichAlbumTracksNow(albumId: string) {
-     const tracks = await prisma.track.findMany({
-         where: { albumId },
-         include: {
-             album: {
-                 include: {
-                     artist: { select: { name: true } },
-                 },
-             },
-         },
-     });
-
-     logger.debug(
-         `[Enrichment] Enriching ${tracks.length} tracks for album ${albumId}`,
-     );
-
-     for (const track of tracks) {
-         try {
-             const trackInfo = await lastFmService.getTrackInfo(
-                 track.album.artist.name,
-                 track.title,
-             );
-
-             if (trackInfo?.toptags?.tag) {
-                 const allTags = trackInfo.toptags.tag.map((t: any) => t.name);
-                 const moodTags = filterMoodTags(allTags);
-
-                 await prisma.track.update({
-                     where: { id: track.id },
-                     data: {
-                         lastfmTags:
-                             moodTags.length > 0 ? moodTags : ["_no_mood_tags"],
-                         analysisStatus: "pending", // Queue for audio analysis
-                     },
-                 });
-             }
-
-             await new Promise((resolve) => setTimeout(resolve, 200));
-         } catch (error) {
-             logger.error(`Failed to enrich track ${track.title}:`, error);
-         }
-     }
- }
 
  /**
   * Re-run artist enrichment only (from the beginning)

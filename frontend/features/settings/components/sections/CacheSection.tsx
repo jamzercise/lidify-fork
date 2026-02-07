@@ -1036,7 +1036,7 @@ export function CacheSection({ settings, onUpdate }: CacheSectionProps) {
                             <input
                                 type="range"
                                 min={1}
-                                max={4}
+                                max={8}
                                 value={clapWorkersConfig?.workers ?? 2}
                                 disabled={isClapWorkersLoading}
                                 onChange={(e) => {
