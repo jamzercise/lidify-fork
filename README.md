@@ -1,6 +1,6 @@
 # Lidify
 
-[![Docker Image](https://img.shields.io/docker/v/chevron7locked/lidify?label=Docker&sort=semver)](https://hub.docker.com/r/chevron7locked/lidify)
+[![Docker Image](https://img.shields.io/docker/v/jamzercise/lidify-fork?label=Docker&sort=semver)](https://hub.docker.com/r/jamzercise/lidify-fork)
 [![GitHub Release](https://img.shields.io/github/v/release/Chevron7Locked/lidify?label=Release)](https://github.com/Chevron7Locked/lidify/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
@@ -9,8 +9,6 @@ A self-hosted, on-demand audio streaming platform that brings the Spotify experi
 Lidify is built for music lovers who want the convenience of streaming services without sacrificing ownership of their library. Point it at your music collection, and Lidify handles the rest: artist discovery, personalized playlists, podcast subscriptions, and seamless integration with tools you already use like Lidarr and Audiobookshelf.
 
 ![Lidify Home Screen](assets/screenshots/desktop-home.png)
-
-This is an experiement based off of: https://github.com/Chevron7Locked/lidify, and using Cursor to try an add additional functionality. This is purely for experiementation and testing, and not guaranteed to work. Nor is there any assumption of future support.
 
 ---
 
@@ -187,7 +185,7 @@ Lidify works as a PWA on mobile devices, giving you a native app-like experience
 -   Installable icon on home screen
 
 ### Android TV
-
+It looks like when I did that, it actually copied the GitHub repo from the original GitHub repo onto my personal repo. What I wanted to know how to do was how to copy this new repo that we created with these updates to my personal repo.
 Lidify includes a dedicated interface optimized for television displays:
 
 -   Large artwork and readable text from across the room
@@ -213,6 +211,52 @@ docker run -d \
 ```
 
 That's it! Open http://localhost:31013 and create your account.
+
+### Install with Dockge (Linux)
+
+[Dockge](https://github.com/louislam/dockge) is a Docker Compose stack manager with a web UI. To run Lidify via Dockge on your Linux server:
+
+1. **Create a stack directory** (e.g. `/opt/stacks/lidify` or a path you use for Dockge):
+   ```bash
+   sudo mkdir -p /opt/stacks/lidify
+   cd /opt/stacks/lidify
+   ```
+
+2. **Add the Compose file**  
+   Copy the production compose file and use it as the stack compose file (Dockge often expects `compose.yaml`):
+   ```bash
+   # From your Lidify repo clone, or download from GitHub
+   cp /path/to/lidify/docker-compose.prod.yml compose.yaml
+   ```
+   Or create `compose.yaml` with the contents of `docker-compose.prod.yml` from this repo.
+
+3. **Create a `.env` file** in the same directory with at least:
+   ```env
+   # Required: path to your music library on the host
+   MUSIC_PATH=/path/to/your/music
+
+   # Strongly recommended: generate with: openssl rand -base64 32
+   SESSION_SECRET=your-generated-session-secret
+
+   # Optional but recommended for production
+   INTERNAL_API_SECRET=your-generated-internal-secret
+
+   # Optional
+   PORT=31013
+   TZ=America/Chicago
+   ```
+   Generate secrets with:
+   ```bash
+   openssl rand -base64 32   # SESSION_SECRET
+   openssl rand -hex 32      # INTERNAL_API_SECRET
+   ```
+
+4. **Create the stack in Dockge**  
+   In the Dockge UI: **Interactive Stack** → set **Stack path** to `/opt/stacks/lidify` (or your directory). Dockge will use `compose.yaml` and load `.env` from that path. Then **Deploy**.
+
+5. **Open Lidify** at `http://YOUR_SERVER_IP:31013` and create your account.
+
+**Tip:** If you use the full stack (Lidarr, Prowlarr, etc.), use `docker-compose.server.yml` instead and set `MUSIC_PATH`, `DOWNLOAD_PATH`, `SESSION_SECRET`, and `INTERNAL_API_SECRET` in `.env`. Ensure the stack path in Dockge points to the directory that contains your `compose.yaml` and `.env`.
 
 **With GPU acceleration** (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):
 
@@ -317,10 +361,24 @@ Lidify offers two release channels to match your stability preferences:
 Production-ready releases. Updated when new stable versions are released.
 
 ```bash
-docker pull chevron7locked/lidify:latest
+docker pull jamzercise/lidify-fork:latest
 # or specific version
-docker pull chevron7locked/lidify:v1.2.0
+docker pull jamzercise/lidify-fork:v1.2.0
 ```
+
+### 🔴 Nightly (Development)
+
+Latest development build. Built on every push to main.
+
+⚠️ **Not recommended for production** - may be unstable or broken.
+
+```bash
+docker pull jamzercise/lidify-fork:nightly
+```
+
+**For contributors:** See [`CONTRIBUTING.md`](CONTRIBUTING.md) for information on submitting pull requests and contributing to Lidify.
+
+---
 
 ## Configuration
 
@@ -497,7 +555,7 @@ nvidia-container-runtime --version
 
 **All-in-One container:**
 ```bash
-docker run -d --gpus all -p 31013:3030 -v /path/to/music:/music -v lidify_data:/data chevron7locked/lidify:latest
+docker run -d --gpus all -p 31013:3030 -v /path/to/music:/music -v lidify_data:/data jamzercise/lidify-fork:latest
 ```
 
 **Docker Compose:**
@@ -518,11 +576,8 @@ Then restart: `docker compose up -d`
 ### Verify GPU Detection
 
 ```bash
-# MusiCNN analyzer
-docker logs lidify_audio_analyzer 2>&1 | grep -i gpu
-
-# CLAP analyzer
-docker logs lidify_audio_analyzer_clap 2>&1 | grep -i gpu
+# All-in-one container (MusiCNN and CLAP run inside lidify-player)
+docker logs lidify-player 2>&1 | grep -i gpu
 ```
 
 Expected: `TensorFlow GPU detected: ...` or `CUDA available: True`
@@ -912,10 +967,9 @@ Lidify wouldn't be possible without these services and projects:
 
 If you encounter issues or have questions:
 
-1. This is an experiment with no guarantee to work at al.
-2. You're on your own.
-3. Check out logs from `docker compose logs` to see if it helps
-4. Good luck!
+1. Check the [Issues](https://github.com/chevron7locked/lidify/issues) page for known problems
+2. Open a new issue with details about your setup and the problem you're experiencing
+3. Include logs from `docker compose logs` if relevant
 
 ---
 

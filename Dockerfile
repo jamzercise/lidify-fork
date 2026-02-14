@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # Lidify All-in-One Docker Image (Hardened)
 # Contains: Backend, Frontend, PostgreSQL, Redis, Audio Analyzer (Essentia AI), yt-dlp for YouTube Music
 # Usage: docker run -d -p 31013:3030 -v /path/to/music:/music -v lidify_data:/data jamzercise/lidify-fork:latest
