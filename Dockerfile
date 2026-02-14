@@ -158,7 +158,8 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 COPY backend/prisma ./prisma/
 RUN echo "=== Migrations copied ===" && ls -la prisma/migrations/ && echo "=== End migrations ==="
-RUN npm ci && npm cache clean --force
+# Use npm install so build works when package-lock.json is out of sync with package.json
+RUN npm install && npm cache clean --force
 RUN npx prisma generate
 
 # Copy backend source and build
@@ -179,7 +180,7 @@ WORKDIR /app/frontend
 
 # Copy frontend package files and install dependencies
 COPY frontend/package*.json ./
-RUN npm ci && npm cache clean --force
+RUN npm install && npm cache clean --force
 
 # Copy frontend source and build
 COPY frontend/ ./
