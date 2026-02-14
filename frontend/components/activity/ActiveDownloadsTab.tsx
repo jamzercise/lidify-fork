@@ -172,7 +172,7 @@ export function ActiveDownloadsTab() {
                                             .soulseekSearchQuery && (
                                             <p className="text-xs text-white/50 truncate">
                                                 Search:{" "}
-                                                {download.metadata.soulseekSearchQuery}
+                                                {String(download.metadata.soulseekSearchQuery)}
                                             </p>
                                         )}
                                         {download.metadata.soulseekPhase ===
@@ -188,9 +188,9 @@ export function ActiveDownloadsTab() {
                                                 null && (
                                             <p className="text-xs text-white/40">
                                                 Found{" "}
-                                                {download.metadata.soulseekMatchesFound}
+                                                {String(download.metadata.soulseekMatchesFound)}
                                                 /
-                                                {download.metadata.soulseekTracksTotal}{" "}
+                                                {String(download.metadata.soulseekTracksTotal)}{" "}
                                                 results
                                             </p>
                                         )}
