@@ -211,19 +211,11 @@ export function ActiveDownloadsTab() {
                                                             width: `${Math.min(
                                                                 100,
                                                                 (100 *
-                                                                    (download
-                                                                        .metadata
-                                                                        ?.soulseekTracksDownloaded ??
-                                                                        download
-                                                                            .metadata
-                                                                            ?.tracksDownloaded ??
+                                                                    (Number(download.metadata?.soulseekTracksDownloaded) ||
+                                                                        Number(download.metadata?.tracksDownloaded) ||
                                                                         0)) /
-                                                                    (download
-                                                                        .metadata
-                                                                        ?.soulseekTracksTotal ??
-                                                                        download
-                                                                            .metadata
-                                                                            ?.tracksTotal ??
+                                                                    (Number(download.metadata?.soulseekTracksTotal) ||
+                                                                        Number(download.metadata?.tracksTotal) ||
                                                                         1)
                                                             )}%`,
                                                         }}
