@@ -196,8 +196,7 @@ export function ActiveDownloadsTab() {
                                         )}
                                         {(download.metadata
                                             .soulseekTracksTotal != null &&
-                                            download.metadata
-                                                .soulseekTracksTotal > 0 &&
+                                            Number(download.metadata.soulseekTracksTotal) > 0 &&
                                             (download.metadata
                                                 .soulseekTracksDownloaded !=
                                                 null ||
