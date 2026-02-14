@@ -13,7 +13,7 @@ services:
         image: chevron7locked/lidify:latest
         container_name: lidify
         ports:
-            - "${FRONTEND_PORT:-3030}:3030"
+            - "${FRONTEND_PORT:-31013}:3030"
         volumes:
             # IMPORTANT: CHANGE THIS to your music library path
             - ${MUSIC_PATH:-/path/to/your/music}:/music
@@ -23,10 +23,12 @@ services:
             - TZ=${TZ:-America/Chicago}
             # Generate with: openssl rand -base64 32
             - SESSION_SECRET=${SESSION_SECRET:-changeme-generate-secure-key}
+            # Internal API secret (backend ↔ CLAP vibe worker); set in production for security
+            - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-lidify-internal-secret-change-me}
             # Lidarr webhook callback URL - how Lidarr reaches Lidify when downloads complete
             # Default uses host.docker.internal which works on most setups with extra_hosts below
-            # Override if using custom Docker networks: e.g., http://192.168.0.20:3030
-            - LIDIFY_CALLBACK_URL=${LIDIFY_CALLBACK_URL:-http://host.docker.internal:3030}
+            # Override if using custom Docker networks: e.g., http://192.168.0.20:31013
+            - LIDIFY_CALLBACK_URL=${LIDIFY_CALLBACK_URL:-http://host.docker.internal:31013}
         # Makes host.docker.internal work on Linux (already works on Docker Desktop)
         extra_hosts:
             - "host.docker.internal:host-gateway"

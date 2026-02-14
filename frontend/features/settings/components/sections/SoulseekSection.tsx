@@ -35,8 +35,8 @@ export function SoulseekSection({ settings, onUpdate, onTest, isTesting }: Souls
     return (
         <SettingsSection
             id="soulseek"
-            title="Soulseek"
-            description="Configure direct Soulseek connection for P2P music downloads"
+            title="Soulseek (P2P)"
+            description="Your Soulseek (slsknet.org) account. Used for: (1) manual search & download on the Search page, and (2) automatic downloads when importing playlists or using Discovery, if Soulseek is set as the primary download source below."
         >
             <SettingsRow
                 label="Soulseek Username"

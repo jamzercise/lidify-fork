@@ -21,6 +21,12 @@ import { lastFmService } from "./lastfm";
 import { AcquisitionError, AcquisitionErrorType } from "./lidarr";
 import PQueue from "p-queue";
 
+/** Minimal download job shape used during acquisition (create returns full model; existingJobId path returns { id }) */
+interface AcquisitionDownloadJob {
+    id: string;
+    metadata?: unknown;
+}
+
 /**
  * Context for tracking acquisition origin
  * Used to link download jobs to their source (Discovery batch or Spotify import)
@@ -57,7 +63,7 @@ export interface TrackAcquisitionRequest {
  */
 export interface AcquisitionResult {
     success: boolean;
-    downloadJobId?: number;
+    downloadJobId?: string;
     source?: "soulseek" | "lidarr";
     error?: string;
     errorType?: AcquisitionErrorType;
@@ -260,6 +266,33 @@ class AcquisitionService {
         });
 
         logger.debug(`[Acquisition] Updated job ${jobId}: ${statusText}`);
+    }
+
+    /**
+     * Merge patch into download job metadata (for Soulseek progress, search summary, etc.)
+     * No-op if job was deleted (e.g. user cancelled); avoids throwing and breaking progress callbacks.
+     */
+    private async updateJobMetadata(
+        jobId: string,
+        metadataPatch: Record<string, unknown>
+    ): Promise<void> {
+        const job = await prisma.downloadJob.findUnique({
+            where: { id: jobId },
+            select: { metadata: true },
+        });
+        if (!job) {
+            logger.debug(
+                `[Acquisition] Skipping metadata update for missing job ${jobId} (may have been deleted)`
+            );
+            return;
+        }
+        const existing = (job.metadata as Record<string, unknown>) || {};
+        await prisma.downloadJob.update({
+            where: { id: jobId },
+            data: {
+                metadata: { ...existing, ...metadataPatch },
+            },
+        });
     }
 
     /**
@@ -510,7 +543,7 @@ class AcquisitionService {
             };
         }
 
-        let job: any;
+        let job: AcquisitionDownloadJob;
         try {
             // Create download job at start for tracking
             job = await this.createDownloadJob(request, context);
@@ -592,11 +625,41 @@ class AcquisitionService {
                 album: request.albumTitle,
             }));
 
+            // Expose Soulseek progress in job metadata for UI
+            await this.updateJobMetadata(job.id, {
+                soulseekSearchQuery: `${request.artistName} - ${request.albumTitle}`,
+                soulseekTracksTotal: tracksToDownload.length,
+                soulseekPhase: "searching",
+            });
+
+            const jobId = job.id;
+            const updateSoulseekProgress = (
+                patch: Record<string, unknown>
+            ) =>
+                this.updateJobMetadata(jobId, patch).catch((e) =>
+                    logger.warn(
+                        `[Acquisition/Soulseek] Progress update failed: ${e.message}`
+                    )
+                );
+
             // Use Soulseek batch download (parallel with concurrency limit)
             const batchResult = await soulseekService.searchAndDownloadBatch(
                 tracksToDownload,
                 musicPath,
-                settings?.soulseekConcurrentDownloads || 4 // concurrency
+                settings?.soulseekConcurrentDownloads || 4,
+                {
+                    onSearchComplete: (matched, total) =>
+                        updateSoulseekProgress({
+                            soulseekPhase: "downloading",
+                            soulseekMatchesFound: matched,
+                            soulseekTracksTotal: total,
+                        }),
+                    onTrackComplete: (downloaded, total) =>
+                        updateSoulseekProgress({
+                            soulseekTracksDownloaded: downloaded,
+                            soulseekTracksTotal: total,
+                        }),
+                }
             );
 
             if (batchResult.successful === 0) {
@@ -609,7 +672,7 @@ class AcquisitionService {
                 return {
                     success: false,
                     tracksTotal: tracks.length,
-                    downloadJobId: parseInt(job.id),
+                    downloadJobId: job.id,
                     error: `No tracks found on Soulseek (searched ${tracks.length} tracks)`,
                 };
             }
@@ -631,22 +694,16 @@ class AcquisitionService {
                     : `Only ${batchResult.successful}/${tracks.length} tracks found`
             );
 
-            // Update job metadata with track counts
-            await prisma.downloadJob.update({
-                where: { id: job.id },
-                data: {
-                    metadata: {
-                        ...job.metadata,
-                        tracksDownloaded: batchResult.successful,
-                        tracksTotal: tracks.length,
-                    },
-                },
+            // Update job metadata with final track counts (merge with existing Soulseek progress)
+            await this.updateJobMetadata(job.id, {
+                tracksDownloaded: batchResult.successful,
+                tracksTotal: tracks.length,
             });
 
             return {
                 success: isSuccess,
                 source: "soulseek",
-                downloadJobId: parseInt(job.id),
+                downloadJobId: job.id,
                 tracksDownloaded: batchResult.successful,
                 tracksTotal: tracks.length,
                 error: isSuccess
@@ -694,7 +751,7 @@ class AcquisitionService {
             };
         }
 
-        let job: any;
+        let job: AcquisitionDownloadJob;
         try {
             // Create download job
             job = await this.createDownloadJob(request, context);
@@ -723,7 +780,7 @@ class AcquisitionService {
                 return {
                     success: true,
                     source: "lidarr",
-                    downloadJobId: parseInt(job.id),
+                    downloadJobId: job.id,
                     correlationId: result.correlationId,
                 };
             } else {
@@ -771,7 +828,7 @@ class AcquisitionService {
     private async createDownloadJob(
         request: AlbumAcquisitionRequest,
         context: AcquisitionContext
-    ): Promise<any> {
+    ): Promise<AcquisitionDownloadJob> {
         // Check for existing job first
         if (context.existingJobId) {
             logger.debug(

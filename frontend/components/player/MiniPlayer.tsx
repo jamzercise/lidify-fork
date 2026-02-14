@@ -10,6 +10,7 @@ import {
     Pause,
     Maximize2,
     Music as MusicIcon,
+    ListMusic,
     SkipBack,
     SkipForward,
     Repeat,
@@ -32,6 +33,9 @@ import { clampTime } from "@/utils/formatTime";
 import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { KeyboardShortcutsTooltip } from "./KeyboardShortcutsTooltip";
 import { SeekSlider } from "./SeekSlider";
+import { SleepTimerButton } from "./SleepTimerButton";
+import { PlaybackSpeedButton } from "./PlaybackSpeedButton";
+import { useQueuePanel } from "@/lib/queue-panel-context";
 import { useFeatures } from "@/lib/features-context";
 
 const EnhancedVibeOverlay = lazy(() => import("./VibeOverlayEnhanced").then(mod => ({ default: mod.EnhancedVibeOverlay })));
@@ -67,7 +71,12 @@ export function MiniPlayer() {
         setPlayerMode,
         startVibeMode,
         stopVibeMode,
+        sleepTimerEndsAt,
+        setSleepTimer,
+        playbackRate,
+        setPlaybackRate,
     } = useAudio();
+    const { openQueue } = useQueuePanel();
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
     const isMobileOrTablet = isMobile || isTablet;
@@ -768,6 +777,41 @@ export function MiniPlayer() {
                             ) : (
                                 <Repeat className="w-3.5 h-3.5" />
                             )}
+                        </button>
+
+                        {/* Sleep timer */}
+                        <SleepTimerButton
+                            sleepTimerEndsAt={sleepTimerEndsAt}
+                            setSleepTimer={setSleepTimer}
+                            hasMedia={hasMedia}
+                            dropdownPlacement="top"
+                            size="sm"
+                        />
+
+                        {/* Playback speed - podcast/audiobook only */}
+                        <PlaybackSpeedButton
+                            playbackRate={playbackRate}
+                            setPlaybackRate={setPlaybackRate}
+                            visible={playbackType === "podcast" || playbackType === "audiobook"}
+                            dropdownPlacement="top"
+                            size="sm"
+                        />
+
+                        {/* Now playing queue */}
+                        <button
+                            type="button"
+                            onClick={openQueue}
+                            className={cn(
+                                "transition-all duration-200 hover:scale-110",
+                                hasMedia
+                                    ? "text-gray-400 hover:text-white"
+                                    : "text-gray-600 cursor-not-allowed"
+                            )}
+                            disabled={!hasMedia}
+                            aria-label="Now playing queue"
+                            title="Now playing queue"
+                        >
+                            <ListMusic className="w-3.5 h-3.5" />
                         </button>
 
                         {/* Vibe Mode Toggle - only when embeddings available */}

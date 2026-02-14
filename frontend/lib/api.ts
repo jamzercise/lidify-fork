@@ -1211,6 +1211,14 @@ class ApiClient {
         );
     }
 
+    /** Sync audiobooks from Audiobookshelf into Lidify cache (rescan for new titles). */
+    async syncAudiobooks(): Promise<{
+        success: boolean;
+        result?: { synced: number; failed: number; skipped: number; errors: string[] };
+    }> {
+        return this.request("/audiobooks/sync", { method: "POST" });
+    }
+
     // Podcasts
     async getPodcasts() {
         return this.request<ApiData[]>("/podcasts");

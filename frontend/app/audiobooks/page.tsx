@@ -15,7 +15,10 @@ import {
     Book,
     ListTree,
     Shuffle,
+    RefreshCw,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/useQueries";
 import { shuffleArray } from "@/utils/shuffle";
 
 interface Audiobook {
@@ -50,10 +53,12 @@ export default function AudiobooksPage() {
     const { currentAudiobook } = useAudioState();
     const { pause } = useAudioControls();
 
+    const queryClient = useQueryClient();
     // Use React Query hook for audiobooks
     const { data: audiobooksData, isLoading, error } = useAudiobooksQuery();
 
     const [filter, setFilter] = useState<FilterType>("all");
+    const [isSyncingAudiobooks, setIsSyncingAudiobooks] = useState(false);
     const [sortBy, setSortBy] = useState<SortType>("title");
     const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
     const [groupBySeries, setGroupBySeries] = useState(false);
@@ -231,6 +236,34 @@ export default function AudiobooksPage() {
         return api.getCoverArtUrl(coverUrl, size);
     };
 
+    // Sync audiobooks from Audiobookshelf (rescan for new titles)
+    const handleSyncAudiobooks = async () => {
+        if (isSyncingAudiobooks) return;
+        setIsSyncingAudiobooks(true);
+        try {
+            const res = await api.syncAudiobooks();
+            if (res?.success && res?.result) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.audiobooks() });
+                queryClient.invalidateQueries({ queryKey: ["library", "recently-listened"] });
+                const { synced, failed } = res.result;
+                if (failed > 0) {
+                    toast.success(`Synced ${synced} audiobooks (${failed} failed)`);
+                } else {
+                    toast.success(`Synced ${synced} audiobooks from Audiobookshelf`);
+                }
+            } else {
+                toast.success("Audiobook sync complete");
+                queryClient.invalidateQueries({ queryKey: queryKeys.audiobooks() });
+                queryClient.invalidateQueries({ queryKey: ["library", "recently-listened"] });
+            }
+        } catch (err) {
+            console.error("Audiobook sync failed:", err);
+            toast.error("Failed to sync audiobooks. Check Settings → Media Servers.");
+        } finally {
+            setIsSyncingAudiobooks(false);
+        }
+    };
+
     // Shuffle all audiobooks
     const handleShuffleAudiobooks = () => {
         if (audiobooks.length === 0) {
@@ -383,10 +416,25 @@ export default function AudiobooksPage() {
 
             {/* Hero Section */}
             <div className="relative">
-                <div className="px-4 md:px-8 py-6">
+                <div className="px-4 md:px-8 py-6 flex items-center justify-between gap-4">
                     <h1 className="text-2xl font-bold text-white">
                         Audiobooks
                     </h1>
+                    <button
+                        type="button"
+                        onClick={handleSyncAudiobooks}
+                        disabled={isSyncingAudiobooks}
+                        className="flex items-center justify-center w-10 h-10 rounded-full bg-[#ecb200] hover:bg-[#d4a000] text-black transition-all hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        title="Sync audiobooks from Audiobookshelf"
+                    >
+                        <RefreshCw
+                            className={`w-5 h-5 ${isSyncingAudiobooks ? "animate-spin" : ""}`}
+                            aria-hidden
+                        />
+                        <span className="sr-only">
+                            {isSyncingAudiobooks ? "Syncing…" : "Sync audiobooks"}
+                        </span>
+                    </button>
                 </div>
             </div>
 

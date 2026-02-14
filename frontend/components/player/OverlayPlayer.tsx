@@ -12,6 +12,7 @@ import {
     SkipForward,
     ChevronDown,
     Music as MusicIcon,
+    ListMusic,
     Shuffle,
     Repeat,
     Repeat1,
@@ -26,6 +27,9 @@ import { cn } from "@/utils/cn";
 import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
 import { toast } from "sonner";
 import { SeekSlider } from "./SeekSlider";
+import { SleepTimerButton } from "./SleepTimerButton";
+import { PlaybackSpeedButton } from "./PlaybackSpeedButton";
+import { useQueuePanel } from "@/lib/queue-panel-context";
 import { useFeatures } from "@/lib/features-context";
 
 export function OverlayPlayer() {
@@ -56,8 +60,13 @@ export function OverlayPlayer() {
         toggleRepeat,
         startVibeMode,
         stopVibeMode,
+        sleepTimerEndsAt,
+        setSleepTimer,
+        playbackRate,
+        setPlaybackRate,
         duration: playbackDuration,
     } = useAudio();
+    const { openQueue } = useQueuePanel();
 
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
@@ -203,7 +212,17 @@ export function OverlayPlayer() {
                 <span className="text-xs text-gray-500 uppercase tracking-widest font-medium">
                     Now Playing
                 </span>
-                <div className="w-11" /> {/* Spacer for centering */}
+                <div className="w-11 flex justify-end">
+                    <button
+                        type="button"
+                        onClick={openQueue}
+                        className="text-gray-400 hover:text-white transition-colors p-2 -mr-2 rounded-full hover:bg-white/10"
+                        aria-label="Now playing queue"
+                        title="Now playing queue"
+                    >
+                        <ListMusic className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
 
             {/* Main Content - Portrait vs Landscape */}
@@ -469,6 +488,22 @@ export function OverlayPlayer() {
                                 <Repeat className="w-5 h-5" />
                             )}
                         </button>
+
+                        {/* Sleep timer */}
+                        <SleepTimerButton
+                            sleepTimerEndsAt={sleepTimerEndsAt}
+                            setSleepTimer={setSleepTimer}
+                            hasMedia={!!(currentTrack || currentAudiobook || currentPodcast)}
+                            dropdownPlacement="bottom"
+                        />
+
+                        {/* Playback speed - podcast/audiobook only */}
+                        <PlaybackSpeedButton
+                            playbackRate={playbackRate}
+                            setPlaybackRate={setPlaybackRate}
+                            visible={playbackType === "podcast" || playbackType === "audiobook"}
+                            dropdownPlacement="bottom"
+                        />
 
                         {/* Vibe button - only when embeddings available */}
                         {!featuresLoading && vibeEmbeddings && (

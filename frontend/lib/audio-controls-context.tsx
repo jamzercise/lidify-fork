@@ -83,6 +83,9 @@ interface AudioControlsContextType {
     // Vibe mode controls
     startVibeMode: () => Promise<{ success: boolean; trackCount: number }>;
     stopVibeMode: () => void;
+
+    // Sleep timer (1–60 min, or null to turn off). When time is up, playback fades out then stops.
+    setSleepTimer: (minutes: number | null) => void;
 }
 
 const AudioControlsContext = createContext<
@@ -850,6 +853,18 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
         state.setVibeQueueIds([]);
     }, [state]);
 
+    const setSleepTimer = useCallback(
+        (minutes: number | null) => {
+            if (minutes == null) {
+                state.setSleepTimerEndsAt(null);
+            } else {
+                const clamped = Math.max(1, Math.min(60, minutes));
+                state.setSleepTimerEndsAt(Date.now() + clamped * 60 * 1000);
+            }
+        },
+        [state]
+    );
+
     // Memoize the entire context value
     const value = useMemo(
         () => ({
@@ -879,6 +894,7 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
             toggleMute,
             startVibeMode,
             stopVibeMode,
+            setSleepTimer,
         }),
         [
             playTrack,
@@ -907,6 +923,7 @@ export function AudioControlsProvider({ children }: { children: ReactNode }) {
             toggleMute,
             startVibeMode,
             stopVibeMode,
+            setSleepTimer,
         ]
     );
 

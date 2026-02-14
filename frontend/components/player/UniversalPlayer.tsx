@@ -2,9 +2,11 @@
 
 import { useAudio } from "@/lib/audio-context";
 import { useIsMobile, useIsTablet } from "@/hooks/useMediaQuery";
+import { QueuePanelProvider } from "@/lib/queue-panel-context";
 import { MiniPlayer } from "./MiniPlayer";
 import { FullPlayer } from "./FullPlayer";
 import { OverlayPlayer } from "./OverlayPlayer";
+import { NowPlayingQueuePanel } from "./NowPlayingQueuePanel";
 import { useEffect, useRef } from "react";
 
 /**
@@ -58,7 +60,8 @@ export function UniversalPlayer() {
     const hasMedia = !!(currentTrack || currentAudiobook || currentPodcast);
 
     return (
-        <>
+        <QueuePanelProvider>
+            <NowPlayingQueuePanel />
             {/* Conditional UI rendering based on mode and device */}
             {/* Note: AudioElement is rendered by ConditionalAudioProvider */}
             {/* Always show player UI (like Spotify), even when no media is playing */}
@@ -71,6 +74,6 @@ export function UniversalPlayer() {
                 /* Desktop: always show full-width bottom player */
                 <FullPlayer />
             )}
-        </>
+        </QueuePanelProvider>
     );
 }

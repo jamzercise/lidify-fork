@@ -15,6 +15,7 @@ import {
     VolumeX,
     Maximize2,
     Music as MusicIcon,
+    ListMusic,
     Shuffle,
     Repeat,
     Repeat1,
@@ -27,6 +28,9 @@ import {
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
 import { KeyboardShortcutsTooltip } from "./KeyboardShortcutsTooltip";
+import { SleepTimerButton } from "./SleepTimerButton";
+import { PlaybackSpeedButton } from "./PlaybackSpeedButton";
+import { useQueuePanel } from "@/lib/queue-panel-context";
 import { cn } from "@/utils/cn";
 import { useFeatures } from "@/lib/features-context";
 import { formatTime, clampTime, formatTimeRemaining } from "@/utils/formatTime";
@@ -52,6 +56,9 @@ export function FullPlayer() {
         vibeSourceFeatures,
         queue,
         currentIndex,
+        sleepTimerEndsAt,
+        playbackRate,
+        setPlaybackRate,
     } = useAudioState();
 
     const {
@@ -80,10 +87,12 @@ export function FullPlayer() {
         toggleRepeat,
         startVibeMode,
         stopVibeMode,
+        setSleepTimer,
     } = useAudioControls();
 
     const [isVibeLoading, setIsVibeLoading] = useState(false);
     const { vibeEmbeddings, loading: featuresLoading } = useFeatures();
+    const { openQueue } = useQueuePanel();
 
     // Get current track's audio features for vibe comparison
     const currentTrackFeatures = queue[currentIndex]?.audioFeatures || null;
@@ -468,6 +477,22 @@ export function FullPlayer() {
                                 )}
                             </button>
 
+                            {/* Sleep timer */}
+                            <SleepTimerButton
+                                sleepTimerEndsAt={sleepTimerEndsAt}
+                                setSleepTimer={setSleepTimer}
+                                hasMedia={hasMedia}
+                                dropdownPlacement="top"
+                            />
+
+                            {/* Playback speed - podcast/audiobook only */}
+                            <PlaybackSpeedButton
+                                playbackRate={playbackRate}
+                                setPlaybackRate={setPlaybackRate}
+                                visible={playbackType === "podcast" || playbackType === "audiobook"}
+                                dropdownPlacement="top"
+                            />
+
                             {/* Vibe Mode Toggle - only when embeddings available */}
                             {!featuresLoading && vibeEmbeddings && (
                                 <button
@@ -584,6 +609,21 @@ export function FullPlayer() {
 
                         {/* Keyboard Shortcuts Info */}
                         <KeyboardShortcutsTooltip />
+
+                        <button
+                            onClick={openQueue}
+                            className={cn(
+                                "transition-all duration-200",
+                                hasMedia
+                                    ? "text-gray-400 hover:text-white hover:scale-110"
+                                    : "text-gray-600 cursor-not-allowed"
+                            )}
+                            disabled={!hasMedia}
+                            aria-label="Now playing queue"
+                            title="Now playing queue"
+                        >
+                            <ListMusic className="w-4 h-4" />
+                        </button>
 
                         <button
                             onClick={() => setPlayerMode("overlay")}

@@ -164,6 +164,90 @@ export function ActiveDownloadsTab() {
                                         {formatTime(download.createdAt)}
                                     </span>
                                 </div>
+                                {/* Soulseek: search summary and progress */}
+                                {download.metadata?.currentSource ===
+                                    "soulseek" && (
+                                    <div className="mt-2 space-y-1.5">
+                                        {download.metadata
+                                            .soulseekSearchQuery && (
+                                            <p className="text-xs text-white/50 truncate">
+                                                Search:{" "}
+                                                {download.metadata.soulseekSearchQuery}
+                                            </p>
+                                        )}
+                                        {download.metadata.soulseekPhase ===
+                                            "searching" && (
+                                            <p className="text-xs text-white/40">
+                                                Searching…
+                                            </p>
+                                        )}
+                                        {download.metadata.soulseekMatchesFound !=
+                                            null &&
+                                            download.metadata
+                                                .soulseekTracksTotal !=
+                                                null && (
+                                            <p className="text-xs text-white/40">
+                                                Found{" "}
+                                                {download.metadata.soulseekMatchesFound}
+                                                /
+                                                {download.metadata.soulseekTracksTotal}{" "}
+                                                results
+                                            </p>
+                                        )}
+                                        {(download.metadata
+                                            .soulseekTracksTotal != null &&
+                                            download.metadata
+                                                .soulseekTracksTotal > 0 &&
+                                            (download.metadata
+                                                .soulseekTracksDownloaded !=
+                                                null ||
+                                                download.metadata
+                                                    .tracksDownloaded !=
+                                                    null)) && (
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-teal-500/80 transition-all duration-300"
+                                                        style={{
+                                                            width: `${Math.min(
+                                                                100,
+                                                                (100 *
+                                                                    (download
+                                                                        .metadata
+                                                                        ?.soulseekTracksDownloaded ??
+                                                                        download
+                                                                            .metadata
+                                                                            ?.tracksDownloaded ??
+                                                                        0)) /
+                                                                    (download
+                                                                        .metadata
+                                                                        ?.soulseekTracksTotal ??
+                                                                        download
+                                                                            .metadata
+                                                                            ?.tracksTotal ??
+                                                                        1)
+                                                            }}%`,
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-xs text-white/40 tabular-nums shrink-0">
+                                                    {download.metadata
+                                                        ?.soulseekTracksDownloaded ??
+                                                        download.metadata
+                                                            ?.tracksDownloaded ??
+                                                        0}
+                                                    /
+                                                    {download.metadata
+                                                        ?.soulseekTracksTotal ??
+                                                        download.metadata
+                                                            ?.tracksTotal ??
+                                                        0}{" "}
+                                                    tracks
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <button
                                 onClick={() => handleCancel(download.id)}

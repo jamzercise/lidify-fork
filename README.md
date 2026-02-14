@@ -116,10 +116,11 @@ Lidify's standout feature for music discovery. While playing any track, activate
 
 ### Playlist Import
 
-Import playlists from Spotify and Deezer, or browse and discover new music directly.
+Import playlists from Spotify, Deezer, and YouTube Music, or browse and discover new music directly.
 
 -   **Spotify Import** - Paste any Spotify playlist URL to import tracks
 -   **Deezer Import** - Same functionality for Deezer playlists
+-   **YouTube Music Import** - Paste a YouTube Music playlist URL to preview and import the track list (downloads use Lidarr/Soulseek like other sources)
 -   **Smart Preview** - See which tracks are already in your library, which albums can be downloaded, and which have no matches
 -   **Selective Download** - Choose exactly which albums to add to your library
 -   **Browse Deezer** - Explore Deezer's featured playlists and radio stations directly in-app
@@ -203,13 +204,13 @@ The TV interface is automatically enabled when accessing Lidify from an Android 
 ```bash
 docker run -d \
   --name lidify \
-  -p 3030:3030 \
+  -p 31013:3030 \
   -v /path/to/your/music:/music \
   -v lidify_data:/data \
   chevron7locked/lidify:latest
 ```
 
-That's it! Open http://localhost:3030 and create your account.
+That's it! Open http://localhost:31013 and create your account.
 
 **With GPU acceleration** (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):
 
@@ -217,7 +218,7 @@ That's it! Open http://localhost:3030 and create your account.
 docker run -d \
   --name lidify \
   --gpus all \
-  -p 3030:3030 \
+  -p 31013:3030 \
   -v /path/to/your/music:/music \
   -v lidify_data:/data \
   chevron7locked/lidify:latest
@@ -227,7 +228,7 @@ docker run -d \
 
 The Lidify container includes everything you need:
 
--   **Web Interface** (port 3030)
+-   **Web Interface** (default port 31013; override with `-p HOST_PORT:3030`)
 -   **API Server** (internal)
 -   **PostgreSQL Database** (internal)
 -   **Redis Cache** (internal)
@@ -237,7 +238,7 @@ The Lidify container includes everything you need:
 ```bash
 docker run -d \
   --name lidify \
-  -p 3030:3030 \
+  -p 31013:3030 \
   -v /path/to/your/music:/music \
   -v lidify_data:/data \
   -e SESSION_SECRET=your-secret-key \
@@ -261,7 +262,7 @@ services:
         image: chevron7locked/lidify:latest
         container_name: lidify
         ports:
-            - "3030:3030"
+            - "31013:3030"
         volumes:
             - /path/to/your/music:/music
             - lidify_data:/data
@@ -344,8 +345,9 @@ The unified Lidify container handles most configuration automatically. Here are 
 | `SESSION_SECRET`                    | Auto-generated                     | Session encryption key (recommended to set for persistence across restarts) |
 | `SETTINGS_ENCRYPTION_KEY`           | Required                           | Encryption key for stored credentials (generate with `openssl rand -base64 32`) |
 | `TZ`                                | `UTC`                              | Timezone for the container                                                  |
-| `PORT`                              | `3030`                             | Port to access Lidify                                                       |
-| `LIDIFY_CALLBACK_URL`               | `http://host.docker.internal:3030` | URL for Lidarr webhook callbacks (see [Lidarr integration](#lidarr))        |
+| `PORT`                              | `31013`                            | Port to access Lidify (host port; container listens on 3030)                 |
+| `LIDIFY_CALLBACK_URL`               | `http://host.docker.internal:31013`| URL for Lidarr webhook callbacks (see [Lidarr integration](#lidarr))        |
+| `INTERNAL_API_SECRET`               | Set in Docker Compose              | Shared secret for CLAP vibe worker ↔ backend (vibe/failure, vibe/success)   |
 | `AUDIO_ANALYSIS_WORKERS`            | `2`                                | Number of parallel workers for audio analysis (1-8)                         |
 | `AUDIO_ANALYSIS_THREADS_PER_WORKER` | `1`                                | Threads per worker for TensorFlow/FFT operations (1-4)                      |
 | `AUDIO_ANALYSIS_BATCH_SIZE`         | `10`                               | Tracks per analysis batch                                                   |
@@ -367,7 +369,7 @@ NEXT_PUBLIC_API_URL=https://lidify-api.yourdomain.com
 And add your domain to the allowed origins:
 
 ```env
-ALLOWED_ORIGINS=http://localhost:3030,https://lidify.yourdomain.com
+ALLOWED_ORIGINS=http://localhost:31013,https://lidify.yourdomain.com
 ```
 
 ---
@@ -384,6 +386,7 @@ Lidify uses several sensitive environment variables. Never commit your `.env` fi
 | `SETTINGS_ENCRYPTION_KEY` | Encrypts stored credentials    | Yes               |
 | `SOULSEEK_USERNAME`       | Soulseek login                 | If using Soulseek |
 | `SOULSEEK_PASSWORD`       | Soulseek password              | If using Soulseek |
+| `INTERNAL_API_SECRET`     | Backend ↔ CLAP worker auth     | Required when running the CLAP vibe-embedding service; set in .env or Docker |
 | `LIDARR_API_KEY`          | Lidarr integration             | If using Lidarr   |
 | `OPENAI_API_KEY`          | AI features                    | Optional          |
 | `LASTFM_API_KEY`          | Artist recommendations         | Optional          |
@@ -452,6 +455,7 @@ Environment variables in docker-compose.yml:
 | `CLAP_WORKERS`            | `2`     | Number of analysis workers (1-8)           |
 | `CLAP_THREADS_PER_WORKER` | `1`     | CPU threads per worker (1-4)               |
 | `CLAP_SLEEP_INTERVAL`     | `5`     | Queue poll interval in seconds             |
+| `INTERNAL_API_SECRET`     | (set in compose) | Shared secret for CLAP → backend (vibe failure/success reporting); must match backend. |
 
 ### Usage
 
@@ -505,7 +509,7 @@ nvidia-container-runtime --version
 
 **All-in-One container:**
 ```bash
-docker run -d --gpus all -p 3030:3030 -v /path/to/music:/music -v lidify_data:/data chevron7locked/lidify:latest
+docker run -d --gpus all -p 31013:3030 -v /path/to/music:/music -v lidify_data:/data chevron7locked/lidify:latest
 ```
 
 **Docker Compose:**
@@ -566,13 +570,13 @@ Lidify will automatically configure a webhook in Lidarr to receive notifications
 
 **Networking Note:**
 
-The webhook requires Lidarr to be able to reach Lidify. By default, Lidify uses `host.docker.internal:3030` which works automatically when using the provided docker-compose files (they include `extra_hosts` to enable this on Linux).
+The webhook requires Lidarr to be able to reach Lidify. By default, Lidify uses `host.docker.internal:31013` which works automatically when using the provided docker-compose files (they include `extra_hosts` to enable this on Linux).
 
 If you're using **custom Docker networks** with static IPs, set the callback URL so Lidarr knows how to reach Lidify:
 
 ```yaml
 environment:
-    - LIDIFY_CALLBACK_URL=http://YOUR_LIDIFY_IP:3030
+    - LIDIFY_CALLBACK_URL=http://YOUR_LIDIFY_IP:31013
 ```
 
 Use the IP address that Lidarr can reach. If both containers are on the same Docker network, use Lidify's container IP.
@@ -622,7 +626,7 @@ When you search for music in Lidify's Discovery tab, Soulseek results appear alo
 
 You can also configure Soulseek as a download source for playlist imports. In Settings > Downloads, set Soulseek as primary or fallback source. When importing a Spotify/Deezer playlist, tracks not found in your library will be searched and downloaded from Soulseek automatically.
 
-**Download progress** is visible in the Activity Panel (bell icon in the top bar).
+**Download progress** is visible in the Activity Panel (bell icon in the top bar). For Soulseek jobs, the Active Downloads tab shows the search query, how many results were found, and a track-by-track progress bar.
 
 **Limitations:**
 
@@ -722,6 +726,12 @@ Your listening progress is saved automatically, so you can pause on one device a
 2. The same preview and import flow applies
 3. Explore Deezer's curated playlists and radio stations for discovery
 
+**From YouTube Music:**
+
+1. Copy a YouTube Music playlist URL
+2. Go to Import and paste the URL (or use Browse → Parse playlist URL)
+3. Preview and select albums to download; acquisition uses your configured source (Lidarr/Soulseek) like Spotify and Deezer imports
+
 ### Playback Settings
 
 In Settings, you can configure:
@@ -800,13 +810,14 @@ Control metadata enrichment in Settings → Cache & Automation:
 -   **Enrichment Speed** - Adjust concurrency (1-5x) to balance speed vs. system load
 -   **Failure Notifications** - Get notified when enrichment fails for specific items
 -   **Retry/Skip Modal** - Choose to retry failed items or skip them to continue processing
+-   **Audio & Vibe pipelines** - Circuit breakers and retry limits help avoid runaway queues when analyzers are down; failed items appear in Enrichment Failures for retry
 
 ### Activity Panel
 
 The Activity Panel provides real-time visibility into downloads and system events:
 
 -   **Notifications** - Alerts for completed downloads, ready playlists, and import completions
--   **Active Downloads** - Monitor download progress in real-time
+-   **Active Downloads** - Monitor download progress in real-time; for Soulseek, see search query, result count, and track progress bar
 -   **History** - View completed downloads and past events
 
 Access the Activity Panel by clicking the bell icon in the top bar (desktop) or through the menu (mobile).
@@ -844,7 +855,7 @@ Lidify consists of several components working together:
                                              ▼
 ┌─────────────────┐              ┌─────────────────────┐
 │  Music Library  │◄────────────►│     Frontend        │
-│   (Your Files)  │              │   (Next.js :3030)   │
+│   (Your Files)  │              │   (Next.js :31013)  │
 └─────────────────┘              └──────────┬──────────┘
                                             │
                                             ▼
@@ -866,7 +877,7 @@ Lidify consists of several components working together:
 
 | Component           | Purpose                                    | Default Port |
 | ------------------- | ------------------------------------------ | ------------ |
-| Frontend            | Web interface (Next.js)                    | 3030         |
+| Frontend            | Web interface (Next.js)                    | 31013        |
 | Backend             | API server (Express.js)                    | 3006         |
 | PostgreSQL          | Database (with pgvector)                   | 5432         |
 | Redis               | Caching and job queues                     | 6379         |

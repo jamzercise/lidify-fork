@@ -3,6 +3,7 @@ import { logger } from "../utils/logger";
 import { requireAuthOrToken } from "../middleware/auth";
 import { spotifyService } from "../services/spotify";
 import { deezerService, DeezerPlaylistPreview, DeezerRadioStation } from "../services/deezer";
+import { youtubeMusicService } from "../services/youtubeMusic";
 
 const router = Router();
 
@@ -318,8 +319,19 @@ router.post("/playlists/parse", async (req, res) => {
             });
         }
 
+        // Try YouTube Music (requires yt-dlp installed)
+        const ytParsed = youtubeMusicService.parseUrl(url);
+        if (ytParsed && ytParsed.type === "playlist") {
+            return res.json({
+                source: "youtube-music",
+                type: "playlist",
+                id: ytParsed.id,
+                url: `https://music.youtube.com/playlist?list=${ytParsed.id}`,
+            });
+        }
+
         return res.status(400).json({ 
-            error: "Invalid or unsupported URL. Please provide a Spotify or Deezer playlist URL." 
+            error: "Invalid or unsupported URL. Please provide a Spotify, Deezer, or YouTube Music playlist URL." 
         });
     } catch (error: any) {
         logger.error("Parse URL error:", error);

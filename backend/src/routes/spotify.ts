@@ -5,6 +5,7 @@ import { z } from "zod";
 import { spotifyService } from "../services/spotify";
 import { spotifyImportService } from "../services/spotifyImport";
 import { deezerService } from "../services/deezer";
+import { youtubeMusicService } from "../services/youtubeMusic";
 import { readSessionLog, getSessionLogPath } from "../utils/playlistLogger";
 
 const router = Router();
@@ -72,42 +73,57 @@ router.post("/preview", async (req, res) => {
 
         // Detect if it's a Deezer URL
         if (url.includes("deezer.com")) {
-            // Extract playlist ID from Deezer URL
             const deezerMatch = url.match(/playlist[\/:](\d+)/);
             if (!deezerMatch) {
                 return res
                     .status(400)
                     .json({ error: "Invalid Deezer playlist URL" });
             }
-
             const playlistId = deezerMatch[1];
             const deezerPlaylist = await deezerService.getPlaylist(playlistId);
-
             if (!deezerPlaylist) {
                 return res
                     .status(404)
                     .json({ error: "Deezer playlist not found" });
             }
-
-            // Convert Deezer format to Spotify Import format
             const preview =
                 await spotifyImportService.generatePreviewFromDeezer(
                     deezerPlaylist
                 );
-
             logger.debug(
                 `[Playlist Import] Deezer preview generated: ${preview.summary.total} tracks, ${preview.summary.inLibrary} in library`
             );
             res.json(preview);
-        } else {
-            // Handle Spotify URL
-            const preview = await spotifyImportService.generatePreview(url);
+            return;
+        }
 
+        // Detect if it's a YouTube Music URL
+        const ytParsed = youtubeMusicService.parseUrl(url);
+        if (ytParsed && ytParsed.type === "playlist") {
+            const ytPlaylist = await youtubeMusicService.getPlaylist(ytParsed.id);
+            if (!ytPlaylist) {
+                return res.status(502).json({
+                    error:
+                        "Could not fetch YouTube Music playlist. Ensure yt-dlp is installed (e.g. pip install yt-dlp) and the playlist is public.",
+                });
+            }
+            const preview =
+                await spotifyImportService.generatePreviewFromYouTubeMusic(
+                    ytPlaylist
+                );
             logger.debug(
-                `[Spotify Import] Preview generated: ${preview.summary.total} tracks, ${preview.summary.inLibrary} in library`
+                `[Playlist Import] YouTube Music preview generated: ${preview.summary.total} tracks, ${preview.summary.inLibrary} in library`
             );
             res.json(preview);
+            return;
         }
+
+        // Handle Spotify URL
+        const preview = await spotifyImportService.generatePreview(url);
+        logger.debug(
+            `[Spotify Import] Preview generated: ${preview.summary.total} tracks, ${preview.summary.inLibrary} in library`
+        );
+        res.json(preview);
     } catch (error: any) {
         logger.error("Playlist preview error:", error);
         if (error.name === "ZodError") {
@@ -156,7 +172,22 @@ router.post("/import", async (req, res) => {
                 deezerPlaylist
             );
         } else {
-            preview = await spotifyImportService.generatePreview(effectiveUrl);
+            const ytParsed = youtubeMusicService.parseUrl(effectiveUrl);
+            if (ytParsed?.type === "playlist") {
+                const ytPlaylist = await youtubeMusicService.getPlaylist(ytParsed.id);
+                if (!ytPlaylist) {
+                    return res.status(502).json({
+                        error:
+                            "Could not fetch YouTube Music playlist. Ensure yt-dlp is installed and the playlist is public.",
+                    });
+                }
+                preview =
+                    await spotifyImportService.generatePreviewFromYouTubeMusic(
+                        ytPlaylist
+                    );
+            } else {
+                preview = await spotifyImportService.generatePreview(effectiveUrl);
+            }
         }
 
         logger.debug(

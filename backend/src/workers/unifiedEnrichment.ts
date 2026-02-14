@@ -898,34 +898,38 @@ async function queueAudioAnalysis(): Promise<number> {
     );
 
     const redis = getRedis();
-    let queued = 0;
+    const pipeline = redis.pipeline();
+    const now = new Date();
+    const idsToMark: string[] = [];
 
     for (const track of tracks) {
-        try {
-            // Queue for the Python audio analyzer
-            await redis.rpush(
-                "audio:analysis:queue",
-                JSON.stringify({
-                    trackId: track.id,
-                    filePath: track.filePath,
-                    duration: track.duration, // Avoids file read in analyzer
-                }),
-            );
+        pipeline.rpush(
+            "audio:analysis:queue",
+            JSON.stringify({
+                trackId: track.id,
+                filePath: track.filePath,
+                duration: track.duration,
+            })
+        );
+        idsToMark.push(track.id);
+    }
 
-            // Mark as queued (processing) with timestamp for timeout detection
-            await prisma.track.update({
-                where: { id: track.id },
+    try {
+        await pipeline.exec();
+        if (idsToMark.length > 0) {
+            await prisma.track.updateMany({
+                where: { id: { in: idsToMark } },
                 data: {
                     analysisStatus: "processing",
-                    analysisStartedAt: new Date(),
+                    analysisStartedAt: now,
                 },
             });
-
-            queued++;
-        } catch (error) {
-            logger.error(`   Failed to queue ${track.title}:`, error);
         }
+    } catch (error) {
+        logger.error(`   Failed to queue audio analysis batch:`, error);
+        return 0;
     }
+    const queued = idsToMark.length;
 
     if (queued > 0) {
         logger.debug(` Queued ${queued} tracks for audio analysis`);
@@ -938,51 +942,51 @@ async function queueAudioAnalysis(): Promise<number> {
  * Step 4: Queue tracks for CLAP vibe embeddings
  * Only runs if CLAP analyzer is available
  */
+const VIBE_QUEUE_BATCH_SIZE = 100; // Cap per cycle to avoid flooding CLAP workers
+
 async function queueVibeEmbeddings(): Promise<number> {
-      const tracks = await prisma.$queryRaw<{ id: string; filePath: string; vibeAnalysisStatus: string | null }[]>`
-          SELECT t.id, t."filePath", t."vibeAnalysisStatus"
-          FROM "Track" t
-          LEFT JOIN track_embeddings te ON t.id = te.track_id
-          WHERE te.track_id IS NULL
-            AND t."filePath" IS NOT NULL
-            AND (t."vibeAnalysisStatus" IS NULL OR t."vibeAnalysisStatus" = 'pending')
-          LIMIT 1000
-      `;
- 
-     if (tracks.length === 0) {
-         return 0;
-     }
+    const tracks = await prisma.$queryRaw<{ id: string; filePath: string }[]>`
+        SELECT t.id, t."filePath"
+        FROM "Track" t
+        LEFT JOIN track_embeddings te ON t.id = te.track_id
+        WHERE te.track_id IS NULL
+          AND t."filePath" IS NOT NULL
+          AND (t."vibeAnalysisStatus" IS NULL OR t."vibeAnalysisStatus" = 'pending')
+        LIMIT ${VIBE_QUEUE_BATCH_SIZE}
+    `;
 
- const redis = getRedis();
-      let queued = 0;
+    if (tracks.length === 0) {
+        return 0;
+    }
 
-      for (const track of tracks) {
-          try {
-              await prisma.track.update({
-                  where: { id: track.id },
-                  data: {
-                      vibeAnalysisStatus: 'processing',
-                      vibeAnalysisStartedAt: new Date(),
-                      vibeAnalysisStatusUpdatedAt: new Date(),
-                  },
-              });
-              
-              await redis.rpush(
-                  "audio:clap:queue",
-                  JSON.stringify({
-                      trackId: track.id,
-                      filePath: track.filePath,
-                  })
-              );
-              
-              queued++;
-          } catch (error) {
-              logger.error(`   Failed to queue vibe embedding for ${track.id}:`, error);
-          }
-      }
+    const redis = getRedis();
+    const pipeline = redis.pipeline();
+    const now = new Date();
+    const ids = tracks.map((t) => t.id);
 
-      return queued;
- }
+    for (const track of tracks) {
+        pipeline.rpush(
+            "audio:clap:queue",
+            JSON.stringify({ trackId: track.id, filePath: track.filePath })
+        );
+    }
+
+    try {
+        await pipeline.exec();
+        await prisma.track.updateMany({
+            where: { id: { in: ids } },
+            data: {
+                vibeAnalysisStatus: "processing",
+                vibeAnalysisStartedAt: now,
+                vibeAnalysisStatusUpdatedAt: now,
+            },
+        });
+    } catch (error) {
+        logger.error(`   Failed to queue vibe embedding batch:`, error);
+        return 0;
+    }
+    return tracks.length;
+}
 
 /**
  * Check if enrichment should stop and handle state cleanup if stopping.
@@ -1122,9 +1126,19 @@ async function executeVibePhase(): Promise<number> {
         return 0;
     }
 
-    const { reset } = await vibeAnalysisCleanupService.cleanupStaleProcessing();
-    if (reset > 0) {
-        logger.debug(`[ENRICHMENT] Cleaned up ${reset} stale vibe processing entries`);
+    const { reset, permanentlyFailed } =
+        await vibeAnalysisCleanupService.cleanupStaleProcessing();
+    if (reset > 0 || permanentlyFailed > 0) {
+        logger.debug(
+            `[ENRICHMENT] Vibe cleanup: ${reset} reset, ${permanentlyFailed} permanently failed`
+        );
+    }
+
+    if (vibeAnalysisCleanupService.isCircuitOpen()) {
+        logger.warn(
+            "[Enrichment] Vibe embedding circuit breaker OPEN - skipping queue"
+        );
+        return 0;
     }
 
     const result = await queueVibeEmbeddings();

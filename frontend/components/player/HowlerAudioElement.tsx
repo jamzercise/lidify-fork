@@ -83,6 +83,9 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
         volume,
         isMuted,
         repeatMode,
+        playbackRate,
+        sleepTimerEndsAt,
+        setSleepTimerEndsAt,
         setCurrentAudiobook,
         setCurrentTrack,
         setCurrentPodcast,
@@ -532,6 +535,9 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
                 if (startTime > 0) {
                     howlerEngine.seek(startTime);
                 }
+                if (playbackType === "podcast" || playbackType === "audiobook") {
+                    howlerEngine.setRate(playbackRate);
+                }
                 if (playbackType === "podcast" && currentPodcast) {
                     podcastDebugLog("loaded", {
                         loadId: thisLoadId,
@@ -578,7 +584,7 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             isLoadingRef.current = false;
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- canSeek/isPlaying/setIsPlaying intentionally excluded: adding them would re-trigger audio loading on play/pause or seek state changes, breaking playback
-    }, [currentTrack, currentAudiobook, currentPodcast, playbackType, setDuration]);
+    }, [currentTrack, currentAudiobook, currentPodcast, playbackType, playbackRate, setDuration]);
 
     // Preload next track for gapless playback (music only)
     useEffect(() => {
@@ -1131,6 +1137,35 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
             }
         };
     }, []);
+
+    // Apply playback speed when rate changes (podcast/audiobook only)
+    useEffect(() => {
+        if (playbackType === "podcast" || playbackType === "audiobook") {
+            howlerEngine.setRate(playbackRate);
+        }
+    }, [playbackType, playbackRate]);
+
+    // Sleep timer: when time is up, fade out then pause
+    const FADE_OUT_MS = 4000;
+    useEffect(() => {
+        if (sleepTimerEndsAt == null) return;
+
+        const intervalId = setInterval(() => {
+            if (Date.now() < sleepTimerEndsAt) return;
+
+            clearInterval(intervalId);
+            setSleepTimerEndsAt(null);
+
+            howlerEngine.fadeOut(FADE_OUT_MS).then(() => {
+                pause();
+                // Restore volume so next play is at correct level
+                howlerEngine.setVolume(volume);
+                howlerEngine.setMuted(isMuted);
+            });
+        }, 1000);
+
+        return () => clearInterval(intervalId);
+    }, [sleepTimerEndsAt, setSleepTimerEndsAt, pause, volume, isMuted]);
 
     // Periodic progress saving for audiobooks and podcasts
     useEffect(() => {

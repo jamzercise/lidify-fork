@@ -44,14 +44,14 @@ export function DownloadPreferencesSection({
         <SettingsSection
             id="download-preferences"
             title="Download Preferences"
-            description="Configure how music is downloaded for playlists and discovery"
+            description="Controls how missing tracks are acquired when you import playlists (Spotify, Deezer, YouTube Music) or use Discovery. Choose Soulseek for per-track P2P downloads, or Lidarr for full-album downloads from your indexers."
         >
             <SettingsRow
                 label="Primary Download Source"
                 description={
                     isDisabled
                         ? "Requires both Soulseek and Lidarr to be configured"
-                        : "Choose how to download music for imported playlists"
+                        : "Which source to use first when importing playlists or filling Discovery: Soulseek (search P2P by track) or Lidarr (request full albums from indexers)."
                 }
             >
                 <SettingsSelect
@@ -98,7 +98,7 @@ export function DownloadPreferencesSection({
 
             <SettingsRow
                 label="Soulseek Concurrent Downloads"
-                description="Number of simultaneous downloads when using Soulseek (1-10)"
+                description="How many Soulseek downloads can run at once when the app is fetching tracks (e.g. during playlist import). 1–10."
             >
                 <SettingsSelect
                     value={settings.soulseekConcurrentDownloads?.toString() || "4"}

@@ -452,6 +452,26 @@ function DownloadJobItem({
                             {job.error}
                         </p>
                     )}
+                    {job.metadata?.currentSource === "soulseek" &&
+                        (job.metadata.soulseekSearchQuery != null ||
+                            job.metadata.soulseekTracksTotal != null) && (
+                            <p className="text-xs text-white/40 mt-1 truncate">
+                                {job.metadata.soulseekSearchQuery && (
+                                    <span>Search: {job.metadata.soulseekSearchQuery}</span>
+                                )}
+                                {job.metadata.soulseekTracksDownloaded != null &&
+                                    job.metadata.soulseekTracksTotal != null && (
+                                        <span>
+                                            {job.metadata.soulseekSearchQuery
+                                                ? " • "
+                                                : ""}
+                                            {job.metadata.soulseekTracksDownloaded}/
+                                            {job.metadata.soulseekTracksTotal}{" "}
+                                            tracks
+                                        </span>
+                                    )}
+                            </p>
+                        )}
                 </div>
                 {canDelete && (
                     <button

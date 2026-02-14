@@ -1099,11 +1099,16 @@ class SoulseekService {
      * Search and download multiple tracks in parallel
      * - Searches run fully parallel (fast, 15s timeout each)
      * - Downloads limited to concurrency of 4 to prevent network saturation
+     * - Optional callbacks for UI progress: onSearchComplete(matched, total), onTrackComplete(downloaded, total)
      */
     async searchAndDownloadBatch(
         tracks: Array<{ artist: string; title: string; album: string }>,
         musicPath: string,
-        concurrency: number = 4
+        concurrency: number = 4,
+        callbacks?: {
+            onSearchComplete?(matched: number, total: number): void | Promise<void>;
+            onTrackComplete?(downloaded: number, total: number): void | Promise<void>;
+        }
     ): Promise<{
         successful: number;
         failed: number;
@@ -1122,6 +1127,7 @@ class SoulseekService {
             files: [],
             errors: [],
         };
+        const total = tracks.length;
 
         // Phase 1: Search all tracks in parallel (searches are fast)
         sessionLog(
@@ -1144,6 +1150,8 @@ class SoulseekService {
             "SOULSEEK",
             `Found matches for ${tracksWithMatches.length}/${tracks.length} tracks, downloading with concurrency ${concurrency}...`
         );
+
+        await callbacks?.onSearchComplete?.(tracksWithMatches.length, total);
 
         // Count tracks with no search results as failed
         const noMatchTracks = searchResults.filter(
@@ -1177,6 +1185,8 @@ class SoulseekService {
                         }`
                     );
                 }
+                const completed = results.successful + results.failed;
+                await callbacks?.onTrackComplete?.(completed, total);
             })
         );
 

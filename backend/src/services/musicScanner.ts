@@ -13,7 +13,9 @@ import {
     extractPrimaryArtist,
     parseArtistFromPath,
 } from "../utils/artistNormalization";
-import { backfillAllArtistCounts } from "./artistCountsService";
+import {
+    updateMultipleArtistCounts,
+} from "./artistCountsService";
 
 // Supported audio formats
 const AUDIO_EXTENSIONS = new Set([
@@ -36,6 +38,14 @@ interface ScanProgress {
     errors: Array<{ file: string; error: string }>;
 }
 
+/** Shape of existing track row for scan diff and affected-artist tracking */
+interface ExistingTrackRow {
+    id: string;
+    filePath: string;
+    fileModified: Date;
+    album: { artistId: string } | null;
+}
+
 interface ScanResult {
     tracksAdded: number;
     tracksUpdated: number;
@@ -44,10 +54,26 @@ interface ScanResult {
     duration: number;
 }
 
+/** Optional stats from caller to avoid re-stat'ing the same file */
+interface ProcessFileStats {
+    mtime: Date;
+    size: number;
+}
+
 export class MusicScannerService {
     private scanQueue = new PQueue({ concurrency: 10 });
     private progressCallback?: (progress: ScanProgress) => void;
     private coverArtExtractor?: CoverArtExtractor;
+    /** Per-scan caches to avoid repeated DB lookups for same artist/album (e.g. whole album) */
+    private scanArtistCache = new Map<
+        string,
+        { id: string; name: string; normalizedName: string; mbid: string }
+    >();
+    private scanAlbumCache = new Map<
+        string,
+        { id: string; artistId: string; title: string; coverUrl: string | null }
+    >();
+    private scanAffectedArtistIds = new Set<string>();
 
     constructor(
         progressCallback?: (progress: ScanProgress) => void,
@@ -74,21 +100,27 @@ export class MusicScannerService {
 
         logger.debug(`Starting library scan: ${musicPath}`);
 
+        // Reset per-scan caches so repeated lookups for same artist/album hit memory instead of DB
+        this.scanArtistCache.clear();
+        this.scanAlbumCache.clear();
+        this.scanAffectedArtistIds.clear();
+
         // Step 1: Find all audio files
         const audioFiles = await this.findAudioFiles(musicPath);
         logger.debug(`Found ${audioFiles.length} audio files`);
 
-        // Step 2: Get existing tracks from database
-        const existingTracks = await prisma.track.findMany({
+        // Step 2: Get existing tracks from database (include album.artistId for affected-artist tracking on remove)
+        const existingTracks = (await prisma.track.findMany({
             select: {
                 id: true,
                 filePath: true,
                 fileModified: true,
+                album: { select: { artistId: true } },
             },
-        });
+        })) as ExistingTrackRow[];
 
-        const tracksByPath = new Map(
-            existingTracks.map((t) => [t.filePath, t])
+        const tracksByPath = new Map<string, ExistingTrackRow>(
+            existingTracks.map((t) => [t.filePath, t] as [string, ExistingTrackRow])
         );
 
         // Step 3: Process each audio file
@@ -130,11 +162,12 @@ export class MusicScannerService {
                         result.tracksAdded++;
                     }
 
-                    // Extract metadata and update database
+                    // Pass stats to avoid double stat() inside processAudioFile
                     await this.processAudioFile(
                         audioFile,
                         relativePath,
-                        musicPath
+                        musicPath,
+                        { mtime: fileModified, size: stats.size }
                     );
                 } catch (err: any) {
                     const error = {
@@ -163,6 +196,10 @@ export class MusicScannerService {
         );
 
         if (tracksToRemove.length > 0) {
+            for (const t of tracksToRemove) {
+                if (t.album?.artistId)
+                    this.scanAffectedArtistIds.add(t.album.artistId);
+            }
             await prisma.track.deleteMany({
                 where: {
                     id: { in: tracksToRemove.map((t) => t.id) },
@@ -177,14 +214,17 @@ export class MusicScannerService {
             where: {
                 tracks: { none: {} },
             },
-            select: { id: true, title: true },
+            select: { id: true, title: true, artistId: true },
         });
 
         if (orphanedAlbums.length > 0) {
+            for (const a of orphanedAlbums) {
+                this.scanAffectedArtistIds.add(a.artistId);
+            }
             logger.debug(`Removing ${orphanedAlbums.length} orphaned albums...`);
             await prisma.album.deleteMany({
                 where: {
-                    id: { in: orphanedAlbums.map((a) => a.id) },
+                    id: { in: orphanedAlbums.map((a: { id: string }) => a.id) },
                 },
             });
         }
@@ -198,16 +238,20 @@ export class MusicScannerService {
         });
 
         if (orphanedArtists.length > 0) {
+            type OrphanedArtist = { id: string; name: string };
+            for (const a of orphanedArtists as OrphanedArtist[]) {
+                this.scanAffectedArtistIds.add(a.id);
+            }
             logger.debug(
                 `Removing ${
                     orphanedArtists.length
-                } orphaned artists: ${orphanedArtists
+                } orphaned artists: ${(orphanedArtists as OrphanedArtist[])
                     .map((a) => a.name)
                     .join(", ")}`
             );
             await prisma.artist.deleteMany({
                 where: {
-                    id: { in: orphanedArtists.map((a) => a.id) },
+                    id: { in: (orphanedArtists as OrphanedArtist[]).map((a) => a.id) },
                 },
             });
         }
@@ -217,11 +261,18 @@ export class MusicScannerService {
             `Scan complete: +${result.tracksAdded} ~${result.tracksUpdated} -${result.tracksRemoved} (${result.duration}ms)`
         );
 
-        // Update artist counts in background (non-blocking)
-        // This ensures denormalized counts are accurate after scan
-        backfillAllArtistCounts().catch((err) => {
-            logger.error("[Scan] Artist counts update failed:", err);
-        });
+        // Update counts only for affected artists (faster than full backfill, same result)
+        if (this.scanAffectedArtistIds.size > 0) {
+            updateMultipleArtistCounts([...this.scanAffectedArtistIds]).catch(
+                (err) => {
+                    logger.error("[Scan] Artist counts update failed:", err);
+                }
+            );
+        }
+
+        this.scanArtistCache.clear();
+        this.scanAlbumCache.clear();
+        this.scanAffectedArtistIds.clear();
 
         return result;
     }
@@ -463,16 +514,21 @@ export class MusicScannerService {
     }
 
     /**
-     * Process a single audio file and update database
+     * Process a single audio file and update database.
+     * Optional fileStats avoids a second stat() when caller already has mtime/size.
      */
     private async processAudioFile(
         absolutePath: string,
         relativePath: string,
-        musicPath: string
+        musicPath: string,
+        fileStats?: ProcessFileStats
     ): Promise<void> {
-        // Extract metadata
+        // Extract metadata (reuse caller's stat when provided to avoid duplicate syscall)
         const metadata = await parseFile(absolutePath);
-        const stats = await fs.promises.stat(absolutePath);
+        const fileModified =
+            fileStats?.mtime ?? (await fs.promises.stat(absolutePath)).mtime;
+        const fileSize =
+            fileStats?.size ?? (await fs.promises.stat(absolutePath)).size;
 
         // Parse basic info
         const title =
@@ -524,20 +580,26 @@ export class MusicScannerService {
         // Canonicalize Various Artists variations (VA, V.A., <Various Artists>, etc.)
         artistName = canonicalizeVariousArtists(artistName);
 
-        // Try to find artist with the canonicalized name first
-        // This ensures "VA", "V.A.", etc. all find the canonical "Various Artists"
+        // Try to find artist with the canonicalized name first (check per-scan cache to avoid repeated DB hits for same album)
         const normalizedPrimaryName = normalizeArtistName(artistName);
-        let artist = await prisma.artist.findFirst({
-            where: { normalizedName: normalizedPrimaryName },
-        });
+        let artist = this.scanArtistCache.get(normalizedPrimaryName) as any;
+
+        if (!artist) {
+            artist = await prisma.artist.findFirst({
+                where: { normalizedName: normalizedPrimaryName },
+            });
+        }
 
         // If no match with primary name and we actually extracted something,
         // also try the full raw name (for bands like "Of Mice & Men")
         if (!artist && extractedPrimaryArtist !== rawArtistName) {
             const normalizedRawName = normalizeArtistName(rawArtistName);
-            artist = await prisma.artist.findFirst({
-                where: { normalizedName: normalizedRawName },
-            });
+            artist = this.scanArtistCache.get(normalizedRawName) as any;
+            if (!artist) {
+                artist = await prisma.artist.findFirst({
+                    where: { normalizedName: normalizedRawName },
+                });
+            }
             // If full name matches an existing artist, use that instead
             if (artist) {
                 artistName = rawArtistName;
@@ -643,13 +705,30 @@ export class MusicScannerService {
             }
         }
 
-        // Get or create album
-        let album = await prisma.album.findFirst({
-            where: {
-                artistId: artist.id,
-                title: albumTitle,
-            },
-        });
+        // Cache artist for this scan so other tracks from same album skip DB lookups
+        const artistCacheEntry = {
+            id: artist.id,
+            name: artist.name,
+            normalizedName: normalizedArtistName,
+            mbid: artist.mbid,
+        };
+        this.scanArtistCache.set(normalizedArtistName, artistCacheEntry);
+        if (normalizedPrimaryName !== normalizedArtistName) {
+            this.scanArtistCache.set(normalizedPrimaryName, artistCacheEntry);
+        }
+
+        // Get or create album (check per-scan cache first)
+        const albumCacheKey = `${artist.id}|${albumTitle.toLowerCase().trim()}|${year ?? ""}`;
+        let album = this.scanAlbumCache.get(albumCacheKey) as any;
+
+        if (!album) {
+            album = await prisma.album.findFirst({
+                where: {
+                    artistId: artist.id,
+                    title: albumTitle,
+                },
+            });
+        }
 
         if (!album) {
             // Try to find by release group MBID if available
@@ -687,7 +766,7 @@ export class MusicScannerService {
                     // Artist is discovery-only if they have albums but NONE are LIBRARY
                     if (artistAlbums.length > 0) {
                         const hasLibraryAlbums = artistAlbums.some(
-                            (a) => a.location === "LIBRARY"
+                            (a: { location: string }) => a.location === "LIBRARY"
                         );
                         isDiscoveryArtist = !hasLibraryAlbums;
                         if (isDiscoveryArtist) {
@@ -784,6 +863,15 @@ export class MusicScannerService {
             }
         }
 
+        this.scanAlbumCache.set(albumCacheKey, {
+            id: album.id,
+            artistId: album.artistId,
+            title: album.title,
+            coverUrl: album.coverUrl ?? null,
+        });
+
+        this.scanAffectedArtistIds.add(artist.id);
+
         // Upsert track
         await prisma.track.upsert({
             where: { filePath: relativePath },
@@ -794,8 +882,8 @@ export class MusicScannerService {
                 duration,
                 mime,
                 filePath: relativePath,
-                fileModified: stats.mtime,
-                fileSize: stats.size,
+                fileModified,
+                fileSize,
             },
             update: {
                 albumId: album.id,
@@ -803,8 +891,8 @@ export class MusicScannerService {
                 trackNo,
                 duration,
                 mime,
-                fileModified: stats.mtime,
-                fileSize: stats.size,
+                fileModified,
+                fileSize,
             },
         });
     }

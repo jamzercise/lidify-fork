@@ -5,6 +5,7 @@ import {
     useContext,
     useState,
     useEffect,
+    useCallback,
     ReactNode,
     useMemo,
 } from "react";
@@ -140,6 +141,12 @@ interface AudioStateContextType {
     vibeSourceFeatures: AudioFeatures | null;
     vibeQueueIds: string[];
 
+    // Sleep timer (session-only, not persisted). Timestamp (ms) when timer should fire; null = off.
+    sleepTimerEndsAt: number | null;
+
+    // Playback speed for podcast/audiobook only (0.5–2 in 0.05 steps). Music always 1.
+    playbackRate: number;
+
     // Internal state
     isHydrated: boolean;
     lastServerSync: Date | null;
@@ -169,6 +176,8 @@ interface AudioStateContextType {
         features: SetStateAction<AudioFeatures | null>
     ) => void;
     setVibeQueueIds: (ids: SetStateAction<string[]>) => void;
+    setSleepTimerEndsAt: (timestamp: number | null) => void;
+    setPlaybackRate: (rate: number) => void;
 }
 
 const AudioStateContext = createContext<AudioStateContextType | undefined>(
@@ -189,6 +198,7 @@ const STORAGE_KEYS = {
     VOLUME: "lidify_volume",
     IS_MUTED: "lidify_muted",
     PODCAST_EPISODE_QUEUE: "lidify_podcast_episode_queue",
+    PLAYBACK_RATE: "lidify_playback_rate",
 };
 
 function readStorage(key: string): string | null {
@@ -243,6 +253,23 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
     const [isMuted, setIsMuted] = useState(
         () => readStorage(STORAGE_KEYS.IS_MUTED) === "true"
     );
+    const [playbackRate, setPlaybackRateState] = useState(() => {
+        const v = readStorage(STORAGE_KEYS.PLAYBACK_RATE);
+        if (v == null) return 1;
+        const n = parseFloat(v);
+        return Number.isFinite(n) && n >= 0.5 && n <= 2 ? n : 1;
+    });
+    const setPlaybackRate = useCallback((rate: number) => {
+        const clamped = Math.round(Math.max(0.5, Math.min(2, rate)) * 20) / 20; // snap to 0.05
+        setPlaybackRateState(clamped);
+        if (typeof window !== "undefined") {
+            try {
+                localStorage.setItem(STORAGE_KEYS.PLAYBACK_RATE, clamped.toString());
+            } catch {
+                // ignore
+            }
+        }
+    }, []);
     const [isHydrated] = useState(
         () => typeof window !== "undefined"
     );
@@ -253,6 +280,9 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
     const [vibeSourceFeatures, setVibeSourceFeatures] =
         useState<AudioFeatures | null>(null);
     const [vibeQueueIds, setVibeQueueIds] = useState<string[]>([]);
+
+    // Sleep timer: endsAt = timestamp when timer fires; null = off (session-only, not persisted)
+    const [sleepTimerEndsAt, setSleepTimerEndsAt] = useState<number | null>(null);
 
     // Refresh audiobook/podcast progress from API on mount, then sync with server
     useEffect(() => {
@@ -694,6 +724,8 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             vibeMode,
             vibeSourceFeatures,
             vibeQueueIds,
+            sleepTimerEndsAt,
+            playbackRate,
             isHydrated,
             lastServerSync,
             repeatOneCount,
@@ -716,6 +748,8 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             setVibeMode,
             setVibeSourceFeatures,
             setVibeQueueIds,
+            setSleepTimerEndsAt,
+            setPlaybackRate,
         }),
         [
             currentTrack,
@@ -735,6 +769,8 @@ export function AudioStateProvider({ children }: { children: ReactNode }) {
             vibeMode,
             vibeSourceFeatures,
             vibeQueueIds,
+            sleepTimerEndsAt,
+            playbackRate,
             isHydrated,
             lastServerSync,
             repeatOneCount,

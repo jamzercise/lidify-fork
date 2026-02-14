@@ -15,6 +15,18 @@ export interface DownloadJob {
         currentSource?: "lidarr" | "soulseek";
         lidarrAttempts?: number;
         soulseekAttempts?: number;
+        /** Soulseek: search query shown in UI (e.g. "Artist - Album") */
+        soulseekSearchQuery?: string;
+        /** Soulseek: "searching" | "downloading" */
+        soulseekPhase?: string;
+        /** Soulseek: number of tracks that had search results */
+        soulseekMatchesFound?: number;
+        /** Soulseek: tracks finished (downloaded or failed) */
+        soulseekTracksDownloaded?: number;
+        /** Soulseek: total tracks in batch */
+        soulseekTracksTotal?: number;
+        tracksDownloaded?: number;
+        tracksTotal?: number;
     };
 }
 

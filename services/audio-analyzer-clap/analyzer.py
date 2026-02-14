@@ -448,7 +448,7 @@ class Worker:
         try:
             cursor.execute("""
                 UPDATE "Track"
-                SET "vibeAnalysisStatus" = %s
+                SET "vibeAnalysisStatus" = %s, "vibeAnalysisStatusUpdatedAt" = NOW()
                 WHERE id = %s
             """, (status, track_id))
             self.db.commit()
@@ -472,7 +472,8 @@ class Worker:
                 SET
                     "vibeAnalysisStatus" = 'failed',
                     "vibeAnalysisError" = %s,
-                    "vibeAnalysisRetryCount" = COALESCE("vibeAnalysisRetryCount", 0) + 1
+                    "vibeAnalysisRetryCount" = COALESCE("vibeAnalysisRetryCount", 0) + 1,
+                    "vibeAnalysisStatusUpdatedAt" = NOW()
                 WHERE id = %s
             """, (error[:500], track_id))
             self.db.commit()

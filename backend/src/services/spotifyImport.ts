@@ -2,6 +2,7 @@ import { spotifyService, SpotifyTrack, SpotifyPlaylist } from "./spotify";
 import { logger } from "../utils/logger";
 import { musicBrainzService } from "./musicbrainz";
 import { deezerService } from "./deezer";
+import type { YouTubeMusicPlaylist } from "./youtubeMusic";
 import {
     createPlaylistLogger,
     logPlaylistEvent,
@@ -907,10 +908,14 @@ class SpotifyImportService {
             imageUrl: string | null;
             trackCount: number;
         },
-        source: "Spotify" | "Deezer"
+        source: "Spotify" | "Deezer" | "YouTube Music"
     ): Promise<ImportPreview> {
         const logPrefix =
-            source === "Spotify" ? "[Spotify Import]" : "[Deezer Import]";
+            source === "Spotify"
+                ? "[Spotify Import]"
+                : source === "Deezer"
+                ? "[Deezer Import]"
+                : "[YouTube Music Import]";
 
         // PHASE 0: Early MusicBrainz resolution for "Unknown Album" tracks
         // This MUST happen BEFORE grouping so tracks get grouped by actual albums
@@ -1217,6 +1222,45 @@ class SpotifyImportService {
                 trackCount: deezerPlaylist.trackCount || spotifyTracks.length,
             },
             "Deezer"
+        );
+    }
+
+    /**
+     * Generate a preview from a YouTube Music playlist
+     * Converts YouTube Music tracks to Spotify format and processes them
+     */
+    async generatePreviewFromYouTubeMusic(
+        ytPlaylist: YouTubeMusicPlaylist
+    ): Promise<ImportPreview> {
+        await musicBrainzService.clearStaleRecordingCaches();
+
+        const spotifyTracks: SpotifyTrack[] = ytPlaylist.tracks.map(
+            (track, index) => ({
+                spotifyId: track.youtubeId,
+                title: track.title,
+                artist: track.artist,
+                artistId: "",
+                album: track.album || "Unknown Album",
+                albumId: "",
+                isrc: null,
+                durationMs: track.durationMs,
+                trackNumber: index + 1,
+                previewUrl: null,
+                coverUrl: track.coverUrl || ytPlaylist.imageUrl || null,
+            })
+        );
+
+        return this.buildPreviewFromTracklist(
+            spotifyTracks,
+            {
+                id: ytPlaylist.id,
+                name: ytPlaylist.title,
+                description: ytPlaylist.description || null,
+                owner: ytPlaylist.creator || "YouTube Music",
+                imageUrl: ytPlaylist.imageUrl || null,
+                trackCount: ytPlaylist.trackCount || spotifyTracks.length,
+            },
+            "YouTube Music"
         );
     }
 

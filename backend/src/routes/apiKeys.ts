@@ -66,10 +66,16 @@ router.use(requireAuth);
  */
 router.post("/", async (req, res) => {
     try {
-        const { deviceName } = req.body;
-
-        if (!deviceName || deviceName.trim().length === 0) {
+        const rawName = req.body?.deviceName;
+        if (rawName === undefined || rawName === null || typeof rawName !== "string") {
             return res.status(400).json({ error: "Device name is required" });
+        }
+        const deviceName = rawName.trim();
+        if (deviceName.length === 0) {
+            return res.status(400).json({ error: "Device name is required" });
+        }
+        if (deviceName.length > 200) {
+            return res.status(400).json({ error: "Device name must be 200 characters or less" });
         }
 
         // Use req.user.id (set by requireAuth middleware) - supports both session and JWT auth
@@ -84,7 +90,7 @@ router.post("/", async (req, res) => {
         const apiKey = await prisma.apiKey.create({
             data: {
                 userId,
-                name: deviceName.trim(),
+                name: deviceName,
                 key: apiKeyValue,
             },
         });

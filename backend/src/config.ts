@@ -104,7 +104,12 @@ export const config = {
           }
         : undefined,
 
-    allowedOrigins:
-        process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()) ||
-        (process.env.NODE_ENV === "development" ? true : []),
+    allowedOrigins: (() => {
+        const raw = process.env.ALLOWED_ORIGINS;
+        if (!raw || raw.trim() === "") {
+            return process.env.NODE_ENV === "development" ? true : [];
+        }
+        const list = raw.split(",").map((o) => o.trim()).filter(Boolean);
+        return list.length > 0 ? list : (process.env.NODE_ENV === "development" ? true : []);
+    })(),
 };

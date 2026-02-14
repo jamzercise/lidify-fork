@@ -13,6 +13,38 @@ const router = Router();
 const ANALYSIS_QUEUE = "audio:analysis:queue";
 const VIBE_QUEUE = "audio:clap:queue";
 
+const MAX_ANALYSIS_START_LIMIT = 1000;
+const MAX_VIBE_START_LIMIT = 2000;
+
+/** Reject internal endpoints if INTERNAL_API_SECRET is not configured (security) */
+function requireInternalSecret(
+    req: { headers: { "x-internal-secret"?: string } },
+    res: { status: (n: number) => { json: (o: object) => void } }
+): boolean {
+    const secret = process.env.INTERNAL_API_SECRET;
+    if (!secret || secret.length === 0) {
+        logger.warn("[Analysis] INTERNAL_API_SECRET not set - rejecting internal request");
+        res.status(503).json({
+            error: "Service misconfigured (internal API secret not set)",
+        });
+        return false;
+    }
+    const provided = req.headers["x-internal-secret"];
+    if (provided !== secret) {
+        res.status(403).json({ error: "Forbidden" });
+        return false;
+    }
+    return true;
+}
+
+/** Coerce positive integer and cap to max (for limit params) */
+function clampLimit(value: unknown, defaultVal: number, max: number): number {
+    if (value === undefined || value === null) return defaultVal;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 1) return defaultVal;
+    return Math.min(Math.floor(n), max);
+}
+
 /**
  * GET /api/analysis/status
  * Get audio analysis status and progress
@@ -68,9 +100,12 @@ router.get("/status", requireAuth, async (req, res) => {
  */
 router.post("/start", requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { limit = 100, priority = "recent" } = req.body;
+        const limit = clampLimit(req.body?.limit, 100, MAX_ANALYSIS_START_LIMIT);
+        const priority =
+            req.body?.priority === "title" || req.body?.priority === "recent"
+                ? req.body.priority
+                : "recent";
 
-        // Find pending tracks
         const tracks = await prisma.track.findMany({
             where: {
                 analysisStatus: "pending",
@@ -83,7 +118,7 @@ router.post("/start", requireAuth, requireAdmin, async (req, res) => {
             orderBy: priority === "recent"
                 ? { fileModified: "desc" }
                 : { title: "asc" },
-            take: Math.min(limit, 1000),
+            take: limit,
         });
 
         if (tracks.length === 0) {
@@ -453,17 +488,13 @@ router.put("/clap-workers", requireAuth, requireAdmin, async (req, res) => {
  * Record a vibe embedding failure (called by CLAP analyzer)
  */
 router.post("/vibe/failure", async (req, res) => {
-    // Internal endpoint - verify shared secret from CLAP analyzer
-    const internalSecret = req.headers["x-internal-secret"];
-    if (internalSecret !== process.env.INTERNAL_API_SECRET) {
-        return res.status(403).json({ error: "Forbidden" });
-    }
+    if (!requireInternalSecret(req, res)) return;
 
     try {
         const { trackId, trackName, errorMessage, errorCode } = req.body;
 
-        if (!trackId) {
-            return res.status(400).json({ error: "trackId is required" });
+        if (typeof trackId !== "string" || trackId.length === 0 || trackId.length > 100) {
+            return res.status(400).json({ error: "Valid trackId is required" });
         }
 
         await enrichmentFailureService.recordFailure({
@@ -489,16 +520,15 @@ router.post("/vibe/failure", async (req, res) => {
  */
 router.post("/vibe/start", requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { limit = 500, force = false } = req.body;
+        const limit = clampLimit(req.body?.limit, 500, MAX_VIBE_START_LIMIT);
+        const force = Boolean(req.body?.force);
 
-        // If force mode, delete all existing embeddings first
         if (force) {
             await prisma.$executeRaw`DELETE FROM track_embeddings`;
             await enrichmentFailureService.clearAllFailures("vibe");
             logger.info("Cleared all vibe embeddings for re-generation");
         }
 
-        // Find tracks without vibe embeddings (all tracks if force was used)
         const tracks = await prisma.$queryRaw<{ id: string; filePath: string; duration: number; title: string }[]>`
             SELECT t.id, t."filePath", t.duration, t.title
             FROM "Track" t
@@ -602,17 +632,12 @@ router.post("/vibe/retry", requireAuth, requireAdmin, async (req, res) => {
  * Resolve failure records when a vibe embedding succeeds (called by CLAP analyzer)
  */
 router.post("/vibe/success", async (req, res) => {
-    // Internal endpoint - verify shared secret from CLAP analyzer
-    const internalSecret = req.headers["x-internal-secret"];
-    if (internalSecret !== process.env.INTERNAL_API_SECRET) {
-        return res.status(403).json({ error: "Forbidden" });
-    }
+    if (!requireInternalSecret(req, res)) return;
 
     try {
-        const { trackId } = req.body;
-
-        if (!trackId) {
-            return res.status(400).json({ error: "trackId is required" });
+        const trackId = req.body?.trackId;
+        if (typeof trackId !== "string" || trackId.length === 0 || trackId.length > 100) {
+            return res.status(400).json({ error: "Valid trackId is required" });
         }
 
         // Resolve any stale failure records for this track

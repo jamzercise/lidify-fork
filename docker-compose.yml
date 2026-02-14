@@ -32,8 +32,8 @@ services:
             TRANSCODE_CACHE_PATH: /app/cache/transcodes
             TRANSCODE_CACHE_MAX_GB: ${TRANSCODE_CACHE_MAX_GB:-10}
 
-            # CORS
-            ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3030}
+            # CORS (include your frontend origin; default matches FRONTEND_PORT)
+            ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3030,http://localhost:31013}
 
             # Internal API secret for service-to-service auth
             INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-lidify-internal-secret-change-me}
@@ -86,7 +86,7 @@ services:
             # Exposed to the browser; leave empty by default so the app uses /api via rewrites.
             NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
         ports:
-            - "${FRONTEND_PORT:-3030}:3030"
+            - "${FRONTEND_PORT:-31013}:3030"
         depends_on:
             - backend
         restart: unless-stopped

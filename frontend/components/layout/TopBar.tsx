@@ -46,6 +46,10 @@ export function TopBar() {
             queryClient.invalidateQueries({
                 queryKey: ["enrichment-progress"],
             });
+            // Refresh library data so new music appears immediately
+            queryClient.invalidateQueries({ queryKey: ["library"] });
+            queryClient.invalidateQueries({ queryKey: ["recently-added"] });
+            queryClient.invalidateQueries({ queryKey: ["recently-listened"] });
             setScanJobId(null);
         },
         onError: () => {

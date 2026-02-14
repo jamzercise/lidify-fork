@@ -26,13 +26,16 @@ export function useAudio() {
         playbackType: state.playbackType,
         queue: state.queue,
         currentIndex: state.currentIndex,
+        podcastEpisodeQueue: state.podcastEpisodeQueue,
         isShuffle: state.isShuffle,
         isRepeat: state.isRepeat,
         repeatMode: state.repeatMode,
         playerMode: state.playerMode,
         volume: state.volume,
         isMuted: state.isMuted,
-        
+        sleepTimerEndsAt: state.sleepTimerEndsAt,
+        playbackRate: state.playbackRate,
+
         // Vibe mode state
         vibeMode: state.vibeMode,
         vibeSourceFeatures: state.vibeSourceFeatures,
@@ -73,7 +76,9 @@ export function useAudio() {
         returnToPreviousMode: controls.returnToPreviousMode,
         setVolume: controls.setVolume,
         toggleMute: controls.toggleMute,
-        
+        setSleepTimer: controls.setSleepTimer,
+        setPlaybackRate: state.setPlaybackRate,
+
         // Vibe mode controls
         startVibeMode: controls.startVibeMode,
         stopVibeMode: controls.stopVibeMode,

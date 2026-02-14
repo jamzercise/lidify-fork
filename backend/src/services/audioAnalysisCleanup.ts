@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../utils/db";
 import { logger } from "../utils/logger";
 import { enrichmentFailureService } from "./enrichmentFailureService";
@@ -113,64 +114,79 @@ class AudioAnalysisCleanupService {
             `[AudioAnalysisCleanup] Found ${staleTracks.length} stale tracks (processing > ${STALE_THRESHOLD_MINUTES} min)`
         );
 
-        let resetCount = 0;
-        let permanentlyFailedCount = 0;
-        let recoveredCount = 0;
+        const staleIds = staleTracks.map((t) => t.id);
+        const withEmbedding = await prisma.$queryRaw<{ track_id: string }[]>`
+            SELECT track_id FROM track_embeddings WHERE track_id IN (${Prisma.join(staleIds)})
+        `;
+        const recoveredIdSet = new Set(withEmbedding.map((r) => r.track_id));
+
+        const recoveredIds: string[] = [];
+        const permanentTracks: typeof staleTracks = [];
+        const resetTracks: typeof staleTracks = [];
 
         for (const track of staleTracks) {
             const newRetryCount = (track.analysisRetryCount || 0) + 1;
-            const trackName = `${track.album.artist.name} - ${track.title}`;
-
-            const existingEmbedding = await prisma.$queryRaw<{ count: bigint }[]>`
-                SELECT COUNT(*) as count FROM track_embeddings WHERE track_id = ${track.id}
-            `;
-
-            if (Number(existingEmbedding[0]?.count) > 0) {
-                await prisma.track.update({
-                    where: { id: track.id },
-                    data: {
-                        analysisStatus: "completed",
-                        analysisError: null,
-                        analysisStartedAt: null,
-                    },
-                });
-
-                logger.info(
-                    `[AudioAnalysisCleanup] Recovered stale track with existing embedding: ${trackName}`
-                );
-
-                recoveredCount++;
+            if (recoveredIdSet.has(track.id)) {
+                recoveredIds.push(track.id);
                 continue;
             }
-
             if (newRetryCount >= MAX_RETRIES) {
-                await prisma.track.update({
-                    where: { id: track.id },
-                    data: {
-                        analysisStatus: "failed",
-                        analysisError: `Exceeded ${MAX_RETRIES} retry attempts (stale processing)`,
-                        analysisRetryCount: newRetryCount,
-                        analysisStartedAt: null,
-                    },
-                });
-
-                await enrichmentFailureService.recordFailure({
-                    entityType: "audio",
-                    entityId: track.id,
-                    entityName: trackName,
-                    errorMessage: `Analysis timed out ${MAX_RETRIES} times - track may be corrupted or unsupported`,
-                    errorCode: "MAX_RETRIES_EXCEEDED",
-                    metadata: {
-                        filePath: track.filePath,
-                        retryCount: newRetryCount,
-                    },
-                });
-
-                logger.warn(
-                    `[AudioAnalysisCleanup] Permanently failed: ${trackName}`
-                );
-                permanentlyFailedCount++;
+                permanentTracks.push(track);
             } else {
+                resetTracks.push(track);
+            }
+        }
+
+        if (recoveredIds.length > 0) {
+            await prisma.track.updateMany({
+                where: { id: { in: recoveredIds } },
+                data: {
+                    analysisStatus: "completed",
+                    analysisError: null,
+                    analysisStartedAt: null,
+                },
+            });
+            recoveredIds.forEach((id) => {
+                const t = staleTracks.find((x) => x.id === id);
+                if (t) {
+                    logger.info(
+                        `[AudioAnalysisCleanup] Recovered stale track with existing embedding: ${t.album.artist.name} - ${t.title}`
+                    );
+                }
+            });
+        }
+
+        for (const track of permanentTracks) {
+            const newRetryCount = (track.analysisRetryCount || 0) + 1;
+            const trackName = `${track.album.artist.name} - ${track.title}`;
+            await prisma.track.update({
+                where: { id: track.id },
+                data: {
+                    analysisStatus: "failed",
+                    analysisError: `Exceeded ${MAX_RETRIES} retry attempts (stale processing)`,
+                    analysisRetryCount: newRetryCount,
+                    analysisStartedAt: null,
+                },
+            });
+            await enrichmentFailureService.recordFailure({
+                entityType: "audio",
+                entityId: track.id,
+                entityName: trackName,
+                errorMessage: `Analysis timed out ${MAX_RETRIES} times - track may be corrupted or unsupported`,
+                errorCode: "MAX_RETRIES_EXCEEDED",
+                metadata: {
+                    filePath: track.filePath,
+                    retryCount: newRetryCount,
+                },
+            });
+            logger.warn(
+                `[AudioAnalysisCleanup] Permanently failed: ${trackName}`
+            );
+        }
+
+        if (resetTracks.length > 0) {
+            for (const track of resetTracks) {
+                const newRetryCount = (track.analysisRetryCount || 0) + 1;
                 await prisma.track.update({
                     where: { id: track.id },
                     data: {
@@ -180,13 +196,15 @@ class AudioAnalysisCleanupService {
                         analysisError: `Reset after stale processing (attempt ${newRetryCount}/${MAX_RETRIES})`,
                     },
                 });
-
                 logger.debug(
-                    `[AudioAnalysisCleanup] Reset for retry (${newRetryCount}/${MAX_RETRIES}): ${trackName}`
+                    `[AudioAnalysisCleanup] Reset for retry (${newRetryCount}/${MAX_RETRIES}): ${track.album.artist.name} - ${track.title}`
                 );
-                resetCount++;
             }
         }
+
+        const resetCount = resetTracks.length;
+        const permanentlyFailedCount = permanentTracks.length;
+        const recoveredCount = recoveredIds.length;
 
         if (resetCount > 0 || permanentlyFailedCount > 0) {
             this.onFailure(resetCount, permanentlyFailedCount);

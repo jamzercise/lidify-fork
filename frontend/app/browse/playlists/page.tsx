@@ -10,7 +10,7 @@ import { useToast } from "@/lib/toast-context";
 // Types
 interface PlaylistPreview {
     id: string;
-    source: "deezer" | "spotify";
+    source: "deezer" | "spotify" | "youtube-music";
     type: "playlist" | "radio";
     title: string;
     description: string | null;

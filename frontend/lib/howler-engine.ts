@@ -529,6 +529,15 @@ class HowlerEngine {
     }
 
     /**
+     * Set playback rate (e.g. 0.5, 1, 1.5, 2). Used for podcast/audiobook speed.
+     */
+    setRate(rate: number): void {
+        if (this.howl) {
+            this.howl.rate(rate);
+        }
+    }
+
+    /**
      * Set volume (0-1)
      */
     setVolume(volume: number): void {
@@ -557,6 +566,17 @@ class HowlerEngine {
      */
     getState(): Readonly<HowlerEngineState> {
         return { ...this.state };
+    }
+
+    /**
+     * Fade volume from current level to 0 over durationMs (e.g. for sleep timer).
+     * Returns a promise that resolves when the fade completes.
+     */
+    fadeOut(durationMs: number): Promise<void> {
+        if (!this.howl) return Promise.resolve();
+        const from = this.state.isMuted ? 0 : this.state.volume;
+        this.howl.fade(from, 0, durationMs);
+        return new Promise((resolve) => setTimeout(resolve, durationMs));
     }
 
     /**
