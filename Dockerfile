@@ -112,8 +112,9 @@ RUN echo "Downloading CLAP model for vibe similarity..." && \
     echo "CLAP model downloaded successfully" && \
     ls -lh /app/models/music_audioset_epoch_15_esc_90.14.pt
 
-# Create database readiness check script
-RUN cat > /app/wait-for-db.sh << 'EOF'
+# Create database readiness check script (outer heredoc so BuildKit parses as one RUN)
+RUN <<'OUTER'
+cat > /app/wait-for-db.sh << 'INNER'
 #!/bin/bash
 TIMEOUT=${1:-120}
 COUNTER=0
@@ -143,10 +144,10 @@ echo "[wait-for-db] ERROR: Database schema not ready after ${TIMEOUT}s"
 echo "[wait-for-db] Listing available tables:"
 PGPASSWORD=lidify psql -h localhost -U lidify -d lidify -c "\dt" 2>&1 || echo "Could not list tables"
 exit 1
-EOF
-
-RUN chmod +x /app/wait-for-db.sh && \
-    sed -i 's/\r$//' /app/wait-for-db.sh
+INNER
+chmod +x /app/wait-for-db.sh
+sed -i 's/\r$//' /app/wait-for-db.sh
+OUTER
 
 # ============================================
 # BACKEND BUILD
@@ -216,8 +217,9 @@ WORKDIR /app
 # Copy healthcheck script
 COPY healthcheck-prod.js /app/healthcheck.js
 
-# Create supervisord config - logs to stdout/stderr for Docker visibility
-RUN cat > /etc/supervisor/conf.d/lidify.conf << 'EOF'
+# Create supervisord config - logs to stdout/stderr for Docker visibility (outer heredoc for BuildKit)
+RUN <<'OUTER'
+cat > /etc/supervisor/conf.d/lidify.conf << 'INNER'
 [supervisord]
 nodaemon=true
 logfile=/dev/null
@@ -296,13 +298,13 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 environment=DATABASE_URL="postgresql://lidify:lidify@localhost:5432/lidify",REDIS_URL="redis://localhost:6379",MUSIC_PATH="/music",BACKEND_URL="http://localhost:3006",SLEEP_INTERVAL="5",NUM_WORKERS="1",MODEL_IDLE_TIMEOUT="300",INTERNAL_API_SECRET="lidify-internal-aio"
 priority=60
-EOF
+INNER
+sed -i 's/\r$//' /etc/supervisor/conf.d/lidify.conf
+OUTER
 
-# Fix Windows line endings in supervisor config
-RUN sed -i 's/\r$//' /etc/supervisor/conf.d/lidify.conf
-
-# Create startup script with root check
-RUN cat > /app/start.sh << 'EOF'
+# Create startup script with root check (outer heredoc for BuildKit)
+RUN <<'OUTER'
+cat > /app/start.sh << 'INNER'
 #!/bin/bash
 set -e
 
@@ -495,10 +497,10 @@ exec env \
     SESSION_SECRET="$SESSION_SECRET" \
     SETTINGS_ENCRYPTION_KEY="$SETTINGS_ENCRYPTION_KEY" \
     /usr/bin/supervisord -c /etc/supervisor/supervisord.conf
-EOF
-
-# Fix Windows line endings (CRLF -> LF) and make executable
-RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
+INNER
+sed -i 's/\r$//' /app/start.sh
+chmod +x /app/start.sh
+OUTER
 
 # Expose ports
 EXPOSE 3030
