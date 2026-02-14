@@ -11,6 +11,7 @@
  * - DownloadJob management with context-based tracking
  */
 
+import { Prisma } from "@prisma/client";
 import { logger } from "../utils/logger";
 import { prisma } from "../utils/db";
 import { getSystemSettings } from "../utils/systemSettings";
@@ -290,7 +291,7 @@ class AcquisitionService {
         await prisma.downloadJob.update({
             where: { id: jobId },
             data: {
-                metadata: { ...existing, ...metadataPatch },
+                metadata: { ...existing, ...metadataPatch } as Prisma.InputJsonValue,
             },
         });
     }
@@ -543,7 +544,7 @@ class AcquisitionService {
             };
         }
 
-        let job: AcquisitionDownloadJob;
+        let job: AcquisitionDownloadJob | undefined;
         try {
             // Create download job at start for tracking
             job = await this.createDownloadJob(request, context);
@@ -751,7 +752,7 @@ class AcquisitionService {
             };
         }
 
-        let job: AcquisitionDownloadJob;
+        let job: AcquisitionDownloadJob | undefined;
         try {
             // Create download job
             job = await this.createDownloadJob(request, context);

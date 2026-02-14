@@ -18,7 +18,7 @@ const MAX_VIBE_START_LIMIT = 2000;
 
 /** Reject internal endpoints if INTERNAL_API_SECRET is not configured (security) */
 function requireInternalSecret(
-    req: { headers: { "x-internal-secret"?: string } },
+    req: { headers: Record<string, string | string[] | undefined> },
     res: { status: (n: number) => { json: (o: object) => void } }
 ): boolean {
     const secret = process.env.INTERNAL_API_SECRET;
@@ -30,7 +30,8 @@ function requireInternalSecret(
         return false;
     }
     const provided = req.headers["x-internal-secret"];
-    if (provided !== secret) {
+    const providedStr = Array.isArray(provided) ? provided[0] : provided;
+    if (providedStr !== secret) {
         res.status(403).json({ error: "Forbidden" });
         return false;
     }
