@@ -10,6 +10,8 @@ Lidify is built for music lovers who want the convenience of streaming services 
 
 ![Lidify Home Screen](assets/screenshots/desktop-home.png)
 
+This is an experiement based off of: https://github.com/Chevron7Locked/lidify, and using Cursor to try an add additional functionality. This is purely for experiementation and testing, and not guaranteed to work. Nor is there any assumption of future support.
+
 ---
 
 ## A Note on Native Apps
@@ -203,11 +205,11 @@ The TV interface is automatically enabled when accessing Lidify from an Android 
 
 ```bash
 docker run -d \
-  --name lidify \
+  --name lidify-player \
   -p 31013:3030 \
   -v /path/to/your/music:/music \
   -v lidify_data:/data \
-  chevron7locked/lidify:latest
+  jamzercise/lidify-fork:latest
 ```
 
 That's it! Open http://localhost:31013 and create your account.
@@ -216,12 +218,12 @@ That's it! Open http://localhost:31013 and create your account.
 
 ```bash
 docker run -d \
-  --name lidify \
+  --name lidify-player \
   --gpus all \
   -p 31013:3030 \
   -v /path/to/your/music:/music \
   -v lidify_data:/data \
-  chevron7locked/lidify:latest
+  jamzercise/lidify-fork:latest
 ```
 
 ### What's Included
@@ -237,14 +239,14 @@ The Lidify container includes everything you need:
 
 ```bash
 docker run -d \
-  --name lidify \
+  --name lidify-player \
   -p 31013:3030 \
   -v /path/to/your/music:/music \
   -v lidify_data:/data \
   -e SESSION_SECRET=your-secret-key \
   -e TZ=America/New_York \
   --add-host=host.docker.internal:host-gateway \
-  chevron7locked/lidify:latest
+  jamzercise/lidify-fork:latest
 ```
 
 | Variable         | Description            | Default        |
@@ -259,8 +261,8 @@ Create a `docker-compose.yml` file:
 ```yaml
 services:
     lidify:
-        image: chevron7locked/lidify:latest
-        container_name: lidify
+        image: jamzercise/lidify-fork:latest
+        container_name: lidify-player
         ports:
             - "31013:3030"
         volumes:
@@ -319,20 +321,6 @@ docker pull chevron7locked/lidify:latest
 # or specific version
 docker pull chevron7locked/lidify:v1.2.0
 ```
-
-### 🔴 Nightly (Development)
-
-Latest development build. Built on every push to main.
-
-⚠️ **Not recommended for production** - may be unstable or broken.
-
-```bash
-docker pull chevron7locked/lidify:nightly
-```
-
-**For contributors:** See [`CONTRIBUTING.md`](CONTRIBUTING.md) for information on submitting pull requests and contributing to Lidify.
-
----
 
 ## Configuration
 
@@ -924,9 +912,10 @@ Lidify wouldn't be possible without these services and projects:
 
 If you encounter issues or have questions:
 
-1. Check the [Issues](https://github.com/chevron7locked/lidify/issues) page for known problems
-2. Open a new issue with details about your setup and the problem you're experiencing
-3. Include logs from `docker compose logs` if relevant
+1. This is an experiment with no guarantee to work at al.
+2. You're on your own.
+3. Check out logs from `docker compose logs` to see if it helps
+4. Good luck!
 
 ---
 
