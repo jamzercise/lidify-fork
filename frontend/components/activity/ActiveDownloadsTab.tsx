@@ -222,16 +222,12 @@ export function ActiveDownloadsTab() {
                                                     />
                                                 </div>
                                                 <span className="text-xs text-white/40 tabular-nums shrink-0">
-                                                    {download.metadata
-                                                        ?.soulseekTracksDownloaded ??
-                                                        download.metadata
-                                                            ?.tracksDownloaded ??
+                                                    {Number(download.metadata?.soulseekTracksDownloaded) ||
+                                                        Number(download.metadata?.tracksDownloaded) ||
                                                         0}
                                                     /
-                                                    {download.metadata
-                                                        ?.soulseekTracksTotal ??
-                                                        download.metadata
-                                                            ?.tracksTotal ??
+                                                    {Number(download.metadata?.soulseekTracksTotal) ||
+                                                        Number(download.metadata?.tracksTotal) ||
                                                         0}{" "}
                                                     tracks
                                                 </span>
