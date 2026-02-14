@@ -226,7 +226,7 @@ export function ActiveDownloadsTab() {
                                                                             .metadata
                                                                             ?.tracksTotal ??
                                                                         1)
-                                                            }}%`,
+                                                            )}%`,
                                                         }}
                                                     />
                                                 </div>
