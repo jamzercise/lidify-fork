@@ -1,6 +1,6 @@
 # Lidify All-in-One Docker Image (Hardened)
-# Contains: Backend, Frontend, PostgreSQL, Redis, Audio Analyzer (Essentia AI)
-# Usage: docker run -d -p 3030:3030 -v /path/to/music:/music lidify/lidify
+# Contains: Backend, Frontend, PostgreSQL, Redis, Audio Analyzer (Essentia AI), yt-dlp for YouTube Music
+# Usage: docker run -d -p 31013:3030 -v /path/to/music:/music -v lidify_data:/data jamzercise/lidify-fork:latest
 
 FROM node:20-slim
 
@@ -185,6 +185,15 @@ COPY frontend/ ./
 # Build Next.js (production)
 ENV NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:3006
 RUN npm run build
+
+# ============================================
+# YT-DLP (YouTube Music playlist import)
+# ============================================
+# Install before removing curl; backend finds it on PATH
+RUN curl -L --progress-bar -o /usr/local/bin/yt-dlp \
+    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" \
+    && chmod +x /usr/local/bin/yt-dlp \
+    && yt-dlp --version
 
 # ============================================
 # SECURITY HARDENING
@@ -475,6 +484,8 @@ TRANSCODE_CACHE_PATH=/data/cache/transcodes
 SESSION_SECRET=$SESSION_SECRET
 SETTINGS_ENCRYPTION_KEY=$SETTINGS_ENCRYPTION_KEY
 ENVEOF
+# INTERNAL_API_SECRET: backend must accept CLAP vibe/failure and vibe/success calls (same container)
+echo "INTERNAL_API_SECRET=\${INTERNAL_API_SECRET:-lidify-internal-aio}" >> /app/backend/.env
 
 echo "Starting Lidify..."
 exec env \

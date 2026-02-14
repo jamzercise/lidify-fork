@@ -13,8 +13,8 @@
 
 services:
   lidify:
-    image: ${DOCKERHUB_USERNAME:-chevron7locked}/lidify:${VERSION:-latest}
-    container_name: lidify
+    image: ${DOCKERHUB_USERNAME:-jamzercise}/lidify-fork:${VERSION:-latest}
+    container_name: lidify-player
     ports:
       - "${PORT:-31013}:3030"
     volumes:

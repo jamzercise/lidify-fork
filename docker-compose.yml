@@ -8,7 +8,7 @@ services:
         build:
             context: ./backend
             dockerfile: Dockerfile
-        container_name: lidify_backend
+        container_name: lidify-player_backend
         environment:
             # Database
             DATABASE_URL: postgresql://${POSTGRES_USER:-lidifydb}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-lidify}
@@ -77,7 +77,7 @@ services:
                 NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
                 # Build type: "nightly" for dev builds, unset/empty for tagged releases
                 NEXT_PUBLIC_BUILD_TYPE: ${NEXT_PUBLIC_BUILD_TYPE:-nightly}
-        container_name: lidify_frontend
+        container_name: lidify-player_frontend
         environment:
             NODE_ENV: ${NODE_ENV:-production}
             # Used by next.config.ts rewrites() inside the container.
@@ -102,7 +102,7 @@ services:
 
     postgres:
         image: pgvector/pgvector:pg16
-        container_name: lidify_db
+        container_name: lidify-player_db
         environment:
             POSTGRES_USER: ${POSTGRES_USER:-lidifydb}
             POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
@@ -128,7 +128,7 @@ services:
 
     redis:
         image: redis:7-alpine
-        container_name: lidify_redis
+        container_name: lidify-player_redis
         ports:
             - "${REDIS_PORT:-6379}:6379"
         restart: unless-stopped
@@ -145,7 +145,7 @@ services:
     # Lidarr - Music collection manager
     lidarr:
         image: lscr.io/linuxserver/lidarr:latest
-        container_name: lidify_lidarr
+        container_name: lidify-player_lidarr
         environment:
             - PUID=${PUID:-1000}
             - PGID=${PGID:-1000}
@@ -161,7 +161,7 @@ services:
     # Prowlarr - Indexer manager
     prowlarr:
         image: lscr.io/linuxserver/prowlarr:latest
-        container_name: lidify_prowlarr
+        container_name: lidify-player_prowlarr
         environment:
             - PUID=${PUID:-1000}
             - PGID=${PGID:-1000}
@@ -175,7 +175,7 @@ services:
     # FlareSolverr - Cloudflare bypass for Prowlarr
     flaresolverr:
         image: ghcr.io/flaresolverr/flaresolverr:latest
-        container_name: lidify_flaresolverr
+        container_name: lidify-player_flaresolverr
         environment:
             - LOG_LEVEL=${LOG_LEVEL:-info}
             - LOG_HTML=${LOG_HTML:-false}
@@ -191,7 +191,7 @@ services:
     # qBittorrent - Torrent client
     qbittorrent:
         image: lscr.io/linuxserver/qbittorrent:latest
-        container_name: lidify_qbittorrent
+        container_name: lidify-player_qbittorrent
         environment:
             - PUID=${PUID:-1000}
             - PGID=${PGID:-1000}
@@ -210,7 +210,7 @@ services:
     # SABnzbd - Usenet client
     sabnzbd:
         image: lscr.io/linuxserver/sabnzbd:latest
-        container_name: lidify_sabnzbd
+        container_name: lidify-player_sabnzbd
         environment:
             - PUID=${PUID:-1000}
             - PGID=${PGID:-1000}
@@ -230,7 +230,7 @@ services:
     audio-analyzer:
         build:
             context: ./services/audio-analyzer
-        container_name: lidify_audio_analyzer
+        container_name: lidify-player_audio_analyzer
         environment:
             REDIS_URL: redis://redis:6379
             DATABASE_URL: postgresql://${POSTGRES_USER:-lidifydb}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-lidify}
@@ -285,7 +285,7 @@ services:
     audio-analyzer-clap:
         build:
             context: ./services/audio-analyzer-clap
-        container_name: lidify_audio_analyzer_clap
+        container_name: lidify-player_audio_analyzer_clap
         environment:
             REDIS_URL: redis://redis:6379
             DATABASE_URL: postgresql://${POSTGRES_USER:-lidifydb}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-lidify}
