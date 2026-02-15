@@ -76,7 +76,7 @@ export function NowPlayingQueuePanel() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="fixed inset-0 bg-black/50 z-40"
+                        className="fixed inset-0 bg-black/50 z-[10000]"
                         aria-hidden="true"
                         onClick={closeQueue}
                     />
@@ -86,7 +86,7 @@ export function NowPlayingQueuePanel() {
                         exit={{ x: "100%" }}
                         transition={{ type: "tween", duration: 0.2, ease: "easeOut" }}
                         className={cn(
-                            "fixed top-0 right-0 bottom-0 w-full max-w-md bg-[#0f0f0f] border-l border-white/10 z-50",
+                            "fixed top-0 right-0 bottom-0 w-full max-w-md bg-[#0f0f0f] border-l border-white/10 z-[10001]",
                             "flex flex-col shadow-2xl"
                         )}
                         role="dialog"

@@ -136,19 +136,17 @@ router.post("/scan", async (req, res) => {
             });
         }
 
-        // First, organize any SLSKD downloads from Docker container to music library
-        // This ensures files are moved before the scan finds them
-        try {
-            const { organizeSingles } = await import(
-                "../workers/organizeSingles"
+        // Organize SLSKD downloads in background so the API responds immediately.
+        // The scan job will run while organize runs; next scan will pick up any newly moved files.
+        import("../workers/organizeSingles")
+            .then(({ organizeSingles }) => {
+                logger.info("[Scan] Organizing SLSKD downloads in background...");
+                return organizeSingles();
+            })
+            .then(() => logger.info("[Scan] SLSKD organization complete"))
+            .catch((err: Error) =>
+                logger.info("[Scan] SLSKD organization skipped:", err?.message)
             );
-            logger.info("[Scan] Organizing SLSKD downloads before scan...");
-            await organizeSingles();
-            logger.info("[Scan] SLSKD organization complete");
-        } catch (err: any) {
-            // Not a fatal error - SLSKD might not be running or have no files
-            logger.info("[Scan] SLSKD organization skipped:", err.message);
-        }
 
         const userId = req.user?.id || "system";
 

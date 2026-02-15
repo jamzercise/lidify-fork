@@ -1,5 +1,5 @@
 import React from "react";
-import { Play, Pause, Volume2, Music } from "lucide-react";
+import { Play, Pause, Volume2, Music, Download } from "lucide-react";
 import { cn } from "@/utils/cn";
 import Image from "next/image";
 import { api } from "@/lib/api";
@@ -17,6 +17,10 @@ interface PopularTracksProps {
     previewTrack: string | null;
     previewPlaying: boolean;
     onPreview: (track: Track, e: React.MouseEvent) => void;
+    /** Download single track (Soulseek). Shown only for unowned tracks when Soulseek is enabled. */
+    onDownloadTrack?: (track: Track, e: React.MouseEvent) => void;
+    soulseekEnabled?: boolean;
+    downloadingTrackId?: string | null;
 }
 
 export const PopularTracks: React.FC<PopularTracksProps> = ({
@@ -28,6 +32,9 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
     previewTrack,
     previewPlaying,
     onPreview,
+    onDownloadTrack,
+    soulseekEnabled = false,
+    downloadingTrackId = null,
 }) => {
 
 
@@ -138,8 +145,22 @@ export const PopularTracks: React.FC<PopularTracksProps> = ({
                                     )}
                             </div>
 
-                            {/* Duration + Preview */}
+                            {/* Duration + Preview + Download */}
                             <div className="flex items-center justify-end gap-2">
+                                {isUnowned && soulseekEnabled && onDownloadTrack && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDownloadTrack(track, e);
+                                        }}
+                                        disabled={downloadingTrackId === track.id}
+                                        className="p-1.5 rounded-full opacity-0 group-hover:opacity-100 hover:bg-white/10 text-gray-400 hover:text-white transition-all disabled:opacity-50"
+                                        title="Download track"
+                                        aria-label={`Download ${track.title}`}
+                                    >
+                                        <Download className="w-4 h-4" />
+                                    </button>
+                                )}
                                 {isUnowned && (
                                     <button
                                         onClick={(e) => {

@@ -1475,6 +1475,28 @@ class ApiClient {
         });
     }
 
+    /**
+     * Download a single track by artist/title via Soulseek (search + download).
+     * Use when you don't have a specific search result (e.g. artist popular tracks).
+     */
+    async downloadTrackByArtistTitle(
+        artist: string,
+        title: string,
+        album?: string
+    ): Promise<{ success: boolean; filePath?: string; error?: string }> {
+        return this.request<{ success: boolean; filePath?: string; error?: string }>(
+            "/soulseek/download",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    artist,
+                    title,
+                    album: album || "Unknown Album",
+                }),
+            }
+        );
+    }
+
     async getSlskdDownloads() {
         return this.request<{ downloads: ApiData[]; count: number }>(
             "/soulseek/downloads"

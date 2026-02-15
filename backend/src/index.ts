@@ -41,6 +41,7 @@ import vibeRoutes from "./routes/vibe";
 import systemRoutes from "./routes/system";
 import { dataCacheService } from "./services/dataCache";
 import { errorHandler } from "./middleware/errorHandler";
+import { requestTimeout } from "./middleware/requestTimeout";
 import { requireAuth, requireAdmin } from "./middleware/auth";
 import {
     authLimiter,
@@ -123,6 +124,9 @@ app.use(
         },
     })
 );
+
+// Request timeout: prevent stuck handlers from holding connections (90s default)
+app.use(requestTimeout());
 
 // Routes - All API routes prefixed with /api for clear separation from frontend
 // Apply rate limiting to auth routes
@@ -264,7 +268,12 @@ async function checkPasswordReset() {
     logger.warn("[Password Reset] Admin password has been reset via ADMIN_RESET_PASSWORD env var. Remove this env var and restart.");
 }
 
-app.listen(config.port, "0.0.0.0", async () => {
+const server = app.listen(config.port, "0.0.0.0", async () => {
+    // Prevent connections from staying open indefinitely (e.g. stuck uploads)
+    server.timeout = 120 * 1000; // 2 minutes
+    server.keepAliveTimeout = 65 * 1000; // Slightly above typical load balancer (60s)
+    server.headersTimeout = 66 * 1000; // Must be > keepAliveTimeout
+
     // Verify database connections before proceeding
     await checkPostgresConnection();
     await checkRedisConnection();

@@ -671,7 +671,7 @@ export function CacheSection({ settings, onUpdate }: CacheSectionProps) {
                                     <h4 className="text-sm font-medium text-gray-300">Audio Analysis</h4>
                                     <p className="text-sm text-gray-500">Not available (lite mode)</p>
                                     <p className="text-xs text-gray-600 mt-1">
-                                        Remove docker-compose.override.yml and restart to enable
+                                        All-in-one image: wait 1–2 min and refresh. Repo Compose: remove docker-compose.override.yml and restart.
                                     </p>
                                 </div>
                             ) : null}
@@ -708,7 +708,7 @@ export function CacheSection({ settings, onUpdate }: CacheSectionProps) {
                                     <h4 className="text-sm font-medium text-gray-300">Vibe Similarity</h4>
                                     <p className="text-sm text-gray-500">Not available (lite mode)</p>
                                     <p className="text-xs text-gray-600 mt-1">
-                                        Remove docker-compose.override.yml and restart to enable
+                                        All-in-one image: wait 1–2 min and refresh. Repo Compose: remove docker-compose.override.yml and restart.
                                     </p>
                                 </div>
                             ) : null}

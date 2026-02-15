@@ -494,7 +494,7 @@ export function OverlayPlayer() {
                             sleepTimerEndsAt={sleepTimerEndsAt}
                             setSleepTimer={setSleepTimer}
                             hasMedia={!!(currentTrack || currentAudiobook || currentPodcast)}
-                            dropdownPlacement="bottom"
+                            dropdownPlacement="top"
                         />
 
                         {/* Playback speed - podcast/audiobook only */}
@@ -502,7 +502,7 @@ export function OverlayPlayer() {
                             playbackRate={playbackRate}
                             setPlaybackRate={setPlaybackRate}
                             visible={playbackType === "podcast" || playbackType === "audiobook"}
-                            dropdownPlacement="bottom"
+                            dropdownPlacement="top"
                         />
 
                         {/* Vibe button - only when embeddings available */}

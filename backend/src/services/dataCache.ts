@@ -371,18 +371,23 @@ class DataCacheService {
         }
     }
 
+    /** Max items to warm up on startup to avoid blocking or high memory on large libraries */
+    private static readonly WARMUP_ARTISTS_LIMIT = 3000;
+    private static readonly WARMUP_ALBUMS_LIMIT = 5000;
+
     /**
      * Warm up Redis cache from database
-     * Called on server startup
+     * Called on server startup. Capped to avoid long startup and memory spikes.
      */
     async warmupCache(): Promise<void> {
         logger.debug("[DataCache] Warming up Redis cache from database...");
 
         try {
-            // Warm up artist images
+            // Warm up artist images (capped for large libraries)
             const artists = await prisma.artist.findMany({
                 where: { heroUrl: { not: null } },
                 select: { id: true, heroUrl: true },
+                take: DataCacheService.WARMUP_ARTISTS_LIMIT,
             });
 
             const artistEntries = artists
@@ -396,10 +401,11 @@ class DataCacheService {
             await this.setRedisCacheBatch(artistEntries);
             logger.debug(`[DataCache] Cached ${artistEntries.length} artist images`);
 
-            // Warm up album covers
+            // Warm up album covers (capped for large libraries)
             const albums = await prisma.album.findMany({
                 where: { coverUrl: { not: null } },
                 select: { id: true, coverUrl: true },
+                take: DataCacheService.WARMUP_ALBUMS_LIMIT,
             });
 
             const albumEntries = albums

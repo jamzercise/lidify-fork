@@ -72,6 +72,7 @@ Thanks for your patience while I work through this.
 -   **Artist name resolution** - Smart alias lookup via Last.fm (e.g., "of mice" → "Of Mice & Men")
 -   **Discography sorting** - Sort artist albums by year or date added
 -   **Deezer previews** - Preview tracks you don't own before adding them to your library
+-   **Single-track download** - On artist pages, download individual popular tracks you don't own via Soulseek (when configured)
 -   **Vibe matching** - Find tracks that match your current mood (see [The Vibe System](#the-vibe-system))
 
 ### Podcasts
@@ -181,6 +182,7 @@ Lidify works as a PWA on mobile devices, giving you a native app-like experience
 -   Full streaming functionality
 -   Background audio playback
 -   Lock screen and notification media controls (iOS Control Center and Android notifications)
+-   Full-screen mobile player with sleep timer and playback speed; Now Playing queue opens over the player and can be closed to return to playback
 -   Offline caching for faster loads
 -   Installable icon on home screen
 
@@ -667,6 +669,8 @@ When you search for music in Lidify's Discovery tab, Soulseek results appear alo
 4. A library scan is triggered to import the new file
 5. Metadata enrichment runs automatically (artist info, mood tags, audio analysis)
 
+**Single-track download from Artist page:** On an artist's page, popular tracks you don't own show a **Preview** badge (and a preview button). When Soulseek is configured, a **Download** button also appears for those tracks. Click it to search Soulseek and download that track into your library (e.g. `Music/Singles/Artist/Album/`). Progress appears in the Activity Panel.
+
 You can also configure Soulseek as a download source for playlist imports. In Settings > Downloads, set Soulseek as primary or fallback source. When importing a Spotify/Deezer playlist, tracks not found in your library will be searched and downloaded from Soulseek automatically.
 
 **Download progress** is visible in the Activity Panel (bell icon in the top bar). For Soulseek jobs, the Active Downloads tab shows the search query, how many results were found, and a track-by-track progress bar.
@@ -960,6 +964,23 @@ Lidify wouldn't be possible without these services and projects:
 -   [Fanart.tv](https://fanart.tv/) - Artist images and artwork
 -   [Lidarr](https://lidarr.audio/) - Music collection management
 -   [Audiobookshelf](https://www.audiobookshelf.org/) - Audiobook and podcast server
+
+---
+
+## Troubleshooting
+
+### UI stuck on loading / "Failed to proxy … socket hang up"
+
+After long runs (e.g. many hours), the frontend may show a spinner and logs may show `Failed to proxy http://127.0.0.1:3006/api/… Error: socket hang up (ECONNRESET)`. This means the Node backend stopped responding to HTTP (crashed, stuck, or out of resources) while other processes (e.g. audio analyzer) may still be running.
+
+**Fix:** Restart the stack so the backend and frontend come back up.
+
+```bash
+docker compose restart
+# or: docker compose down && docker compose up -d
+```
+
+If it happens often, try increasing the container memory limit or reducing analyzer load (e.g. fewer workers) so the backend stays responsive.
 
 ---
 

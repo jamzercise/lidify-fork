@@ -34,7 +34,8 @@ router.get("/genres", async (req, res) => {
             `[HOMEPAGE] ✗ Cache MISS for genres, fetching from database...`
         );
 
-        // Get all albums with genres (excluding discovery albums)
+        // Cap fetch to avoid loading entire library (reduces memory and response time)
+        const MAX_ALBUMS_FOR_GENRES = 8000;
         const albums = await prisma.album.findMany({
             where: {
                 genres: {
@@ -56,6 +57,8 @@ router.get("/genres", async (req, res) => {
                     },
                 },
             },
+            orderBy: { year: "desc" }, // Prefer recent albums for genre distribution
+            take: MAX_ALBUMS_FOR_GENRES,
         });
 
         // Count genre occurrences

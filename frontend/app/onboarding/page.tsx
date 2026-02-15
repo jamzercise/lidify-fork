@@ -607,9 +607,10 @@ export default function OnboardingPage() {
                                                         </>
                                                     ) : (
                                                         <>
-                                                            Running in lite mode. To enable analyzers, remove{" "}
+                                                            Analyzers not detected yet. If you&apos;re using the{" "}
+                                                            <strong>all-in-one Docker image</strong>, there is no override file—wait 1–2 minutes for analyzers to start, then refresh this page. If you run from the repo with Docker Compose, remove{" "}
                                                             <code className="bg-gray-700 px-1.5 py-0.5 rounded text-xs">docker-compose.override.yml</code>{" "}
-                                                            and restart with{" "}
+                                                            and run{" "}
                                                             <code className="bg-gray-700 px-1.5 py-0.5 rounded text-xs">docker compose up -d</code>.
                                                         </>
                                                     )}
