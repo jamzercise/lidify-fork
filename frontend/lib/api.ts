@@ -143,12 +143,13 @@ const getApiBaseUrl = () => {
     }
 
     // Docker all-in-one mode: Use relative URLs (Next.js rewrites will proxy)
-    // This is detected by checking if we're on the same port as the frontend
+    // Port 3030 = container frontend; 31013 = common host-mapped port in Docker
     const frontendPort =
         window.location.port ||
         (window.location.protocol === "https:" ? "443" : "80");
     if (
         frontendPort === "3030" ||
+        frontendPort === "31013" ||
         frontendPort === "443" ||
         frontendPort === "80"
     ) {
