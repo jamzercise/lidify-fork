@@ -1,15 +1,20 @@
 import { Request, Response, NextFunction } from "express";
 import { logger } from "../utils/logger";
 
-/** Default request timeout in ms (90s). Stuck handlers are aborted so connections don't pile up. */
 const DEFAULT_TIMEOUT_MS = 90 * 1000;
+const timeoutMs =
+    typeof process.env.REQUEST_TIMEOUT_MS !== "undefined"
+        ? parseInt(process.env.REQUEST_TIMEOUT_MS, 10)
+        : DEFAULT_TIMEOUT_MS;
+const effectiveTimeout = Number.isNaN(timeoutMs) || timeoutMs <= 0 ? DEFAULT_TIMEOUT_MS : Math.min(timeoutMs, 300000);
 
 /**
  * Request timeout middleware.
  * If the handler doesn't respond within the timeout, respond with 503 and log.
  * Skips streaming, health, and docs endpoints.
  */
-export function requestTimeout(timeoutMs: number = DEFAULT_TIMEOUT_MS) {
+export function requestTimeout(overrideMs?: number) {
+    const ms = overrideMs ?? effectiveTimeout;
     return (req: Request, res: Response, next: NextFunction) => {
         const path = req.path;
 
@@ -25,12 +30,12 @@ export function requestTimeout(timeoutMs: number = DEFAULT_TIMEOUT_MS) {
         let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
             timeoutId = null;
             if (res.headersSent) return;
-            logger.warn(`[RequestTimeout] ${req.method} ${path} timed out after ${timeoutMs}ms`);
+            logger.warn(`[RequestTimeout] ${req.method} ${path} timed out after ${ms}ms`);
             res.status(503).json({
                 error: "Request timeout",
                 message: "The server took too long to respond. Please try again.",
             });
-        }, timeoutMs);
+        }, ms);
 
         const onFinish = () => {
             if (timeoutId) {

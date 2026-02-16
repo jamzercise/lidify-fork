@@ -106,20 +106,16 @@ export function useDownloadStatus(
 
                 if (!mounted) return;
 
-                // Continue polling if there are active downloads
+                // Continue polling if there are active downloads (intervals eased to reduce backend load)
                 if (activeDownloads.length > 0) {
-                    // Poll faster when downloads are active (5 seconds)
-                    pollTimeout = setTimeout(pollDownloads, 5000);
+                    pollTimeout = setTimeout(pollDownloads, 10000); // 10s when active
                 } else if (
                     activeDownloads.length === 0 &&
                     response.length > 0
                 ) {
-                    // Some jobs exist but none active - check again in 10 seconds
-                    // to catch newly created jobs
-                    pollTimeout = setTimeout(pollDownloads, 10000);
+                    pollTimeout = setTimeout(pollDownloads, 20000); // 20s when jobs exist
                 } else {
-                    // No downloads at all - check again in 30 seconds
-                    pollTimeout = setTimeout(pollDownloads, 30000);
+                    pollTimeout = setTimeout(pollDownloads, 45000); // 45s when idle
                 }
             } catch (error: unknown) {
                 console.error("Failed to poll download status:", error);

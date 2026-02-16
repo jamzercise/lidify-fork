@@ -132,6 +132,13 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
     // Track load listeners for cleanup to prevent memory leaks
     const loadListenerRef = useRef<(() => void) | null>(null);
     const loadErrorListenerRef = useRef<(() => void) | null>(null);
+    // Refs for sleep timer so effect only depends on sleepTimerEndsAt (avoids interval being reset on every re-render)
+    const pauseRef = useRef(pause);
+    const volumeRef = useRef(volume);
+    const isMutedRef = useRef(isMuted);
+    pauseRef.current = pause;
+    volumeRef.current = volume;
+    isMutedRef.current = isMuted;
     const cachePollingLoadListenerRef = useRef<(() => void) | null>(null);
     // Counter to track seek operations and abort stale ones
     const seekOperationIdRef = useRef<number>(0);
@@ -1145,27 +1152,28 @@ export const HowlerAudioElement = memo(function HowlerAudioElement() {
         }
     }, [playbackType, playbackRate]);
 
-    // Sleep timer: when time is up, fade out then pause
+    // Sleep timer: when time is up, fade out then pause. Effect depends only on sleepTimerEndsAt
+    // so the interval is not cleared/recreated on every re-render (pause/volume/isMuted refs used in callback).
     const FADE_OUT_MS = 4000;
     useEffect(() => {
         if (sleepTimerEndsAt == null) return;
 
+        const endAt = sleepTimerEndsAt;
         const intervalId = setInterval(() => {
-            if (Date.now() < sleepTimerEndsAt) return;
+            if (Date.now() < endAt) return;
 
             clearInterval(intervalId);
             setSleepTimerEndsAt(null);
 
             howlerEngine.fadeOut(FADE_OUT_MS).then(() => {
-                pause();
-                // Restore volume so next play is at correct level
-                howlerEngine.setVolume(volume);
-                howlerEngine.setMuted(isMuted);
+                pauseRef.current();
+                howlerEngine.setVolume(volumeRef.current);
+                howlerEngine.setMuted(isMutedRef.current);
             });
         }, 1000);
 
         return () => clearInterval(intervalId);
-    }, [sleepTimerEndsAt, setSleepTimerEndsAt, pause, volume, isMuted]);
+    }, [sleepTimerEndsAt, setSleepTimerEndsAt]);
 
     // Periodic progress saving for audiobooks and podcasts
     useEffect(() => {

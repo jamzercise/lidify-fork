@@ -170,9 +170,13 @@ class GlobalRateLimiter {
             } catch (error: any) {
                 lastError = error;
 
-                // Check if it's a rate limit error
+                // Check if it's a rate limit error (429 or 503 with rate-limit message, e.g. MusicBrainz)
+                const status = error.response?.status;
+                const bodyError = error.response?.data?.error;
                 const isRateLimit =
-                    error.response?.status === 429 ||
+                    status === 429 ||
+                    (status === 503 &&
+                        (typeof bodyError === "string" && bodyError.toLowerCase().includes("rate limit"))) ||
                     error.message?.includes("429") ||
                     error.message?.toLowerCase().includes("rate limit");
 

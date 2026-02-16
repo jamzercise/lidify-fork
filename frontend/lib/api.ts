@@ -326,10 +326,26 @@ class ApiClient {
         // All API endpoints are prefixed with /api
         const url = `${this.getBaseUrl()}/api${endpoint}`;
 
+        // Client-side timeout so the UI doesn't hang when the backend is unresponsive (e.g. ECONNRESET / hung).
+        // Slightly longer than typical backend request timeout (90s) so we usually get a proper 503 first.
+        const REQUEST_TIMEOUT_MS = 100 * 1000;
+        const isStream = endpoint.includes("/stream");
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const controller =
+            typeof AbortController !== "undefined" && !fetchOptions.signal && !isStream
+                ? new AbortController()
+                : null;
+        if (controller) {
+            timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        }
+
         const response = await fetch(url, {
             ...fetchOptions,
             headers,
             credentials: "include", // Still send cookies for backward compatibility
+            signal: controller?.signal ?? fetchOptions.signal,
+        }).finally(() => {
+            if (timeoutId) clearTimeout(timeoutId);
         });
 
         if (!response.ok) {

@@ -129,6 +129,17 @@ router.post("/preview", async (req, res) => {
         if (error.name === "ZodError") {
             return res.status(400).json({ error: "Invalid request body" });
         }
+        // MusicBrainz (used for matching tracks) returns 503 when rate-limited
+        const isRateLimit =
+            error.response?.status === 503 ||
+            error.response?.status === 429 ||
+            (error.response?.data?.error && String(error.response.data.error).toLowerCase().includes("rate limit"));
+        if (isRateLimit) {
+            return res.status(503).json({
+                error:
+                    "MusicBrainz is temporarily rate-limiting lookup requests. Please wait a minute and try again.",
+            });
+        }
         res.status(500).json({
             error: error.message || "Failed to generate preview",
         });

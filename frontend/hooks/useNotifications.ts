@@ -44,7 +44,7 @@ export function useNotifications() {
     } = useQuery<Notification[]>({
         queryKey: ["notifications"],
         queryFn: () => api.get<Notification[]>("/notifications"),
-        refetchInterval: 30000,
+        refetchInterval: 45000, // 45s - reduce load when backend is under stress
     });
 
     // Derive unread count from data (computed, not stored)
@@ -157,7 +157,7 @@ export function useDownloadHistory() {
     } = useQuery<DownloadHistoryItem[]>({
         queryKey: ["download-history"],
         queryFn: fetchHistory,
-        refetchInterval: 30000, // 30s - history doesn't need frequent updates
+        refetchInterval: 60000, // 60s - history doesn't need frequent updates
     });
 
     const queryClient = useQueryClient();
@@ -224,10 +224,10 @@ export function useActiveDownloads() {
     } = useQuery<DownloadHistoryItem[]>({
         queryKey: ["active-downloads"],
         queryFn: fetchDownloads,
-        // Adaptive polling: 10s when active, 30s when idle
+        // Adaptive polling: 15s when active, 45s when idle (reduced to ease backend load)
         refetchInterval: (query) => {
             const data = query.state.data;
-            return data && data.length > 0 ? 10000 : 30000;
+            return data && data.length > 0 ? 15000 : 45000;
         },
     });
 

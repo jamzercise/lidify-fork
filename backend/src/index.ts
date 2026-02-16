@@ -465,6 +465,19 @@ const server = app.listen(config.port, "0.0.0.0", async () => {
     })();
 });
 
+// Event loop delay monitor - logs when the loop is blocked (helps diagnose "backend hung" issues)
+const EVENT_LOOP_CHECK_MS = 30000;
+const EVENT_LOOP_WARN_THRESHOLD_MS = 2000;
+let eventLoopCheckExpected = Date.now();
+setInterval(() => {
+    const now = Date.now();
+    const delay = now - eventLoopCheckExpected;
+    eventLoopCheckExpected = now + EVENT_LOOP_CHECK_MS;
+    if (delay > EVENT_LOOP_WARN_THRESHOLD_MS) {
+        logger.warn(`[EventLoop] Delay detected: ${delay}ms (expected ~${EVENT_LOOP_CHECK_MS}ms). Backend may be under heavy load or blocked.`);
+    }
+}, EVENT_LOOP_CHECK_MS);
+
 // Graceful shutdown handling
 let isShuttingDown = false;
 

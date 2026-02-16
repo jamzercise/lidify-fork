@@ -388,7 +388,7 @@ function SpotifyImportPageContent() {
                             href="/browse/playlists"
                             className="text-[#ecb200] hover:underline font-medium"
                         >
-                            Browse Deezer playlists & radio stations →
+                            Browse Deezer playlists, or paste a Spotify/YouTube Music URL above →
                         </Link>
                     </p>
                 </div>
@@ -404,7 +404,7 @@ function SpotifyImportPageContent() {
                                 type="text"
                                 value={url}
                                 onChange={handleUrlChange}
-                                placeholder="https://www.deezer.com/playlist/... or https://open.spotify.com/playlist/..."
+                                placeholder="Deezer, Spotify, or YouTube Music playlist URL"
                                 className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#ecb200]/50 focus:border-[#ecb200] transition-colors"
                                 onKeyDown={(e) =>
                                     e.key === "Enter" && handleFetchPreview()
@@ -412,9 +412,9 @@ function SpotifyImportPageContent() {
                             />
                             <p className="text-xs text-gray-500 mt-2">
                                 Paste a public{" "}
-                                <span className="text-[#AD47FF]">Deezer</span>{" "}
-                                or{" "}
-                                <span className="text-[#1DB954]">Spotify</span>{" "}
+                                <span className="text-[#AD47FF]">Deezer</span>,{" "}
+                                <span className="text-[#1DB954]">Spotify</span>, or{" "}
+                                <span className="text-[#FF0000]">YouTube Music</span>{" "}
                                 playlist URL
                             </p>
                         </div>
