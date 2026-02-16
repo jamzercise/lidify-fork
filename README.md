@@ -893,6 +893,7 @@ Monitor background job queues at `/admin/queues`:
 If the frontend shows "socket hang up" or the API stops responding (e.g. after many hours), the backend may be overloaded or the event loop blocked. The following help reduce hangups and aid diagnosis:
 
 -   **Request timeout** – API handlers are limited to 90 seconds by default. You can increase this with `REQUEST_TIMEOUT_MS` (e.g. `120000` for 2 minutes). Requests that exceed the limit receive 503 so connections don’t pile up.
+-   **Keep-alive** – The backend keeps HTTP connections alive for 5 minutes so the Next.js proxy (same container) doesn’t reuse a connection the backend already closed, which previously caused frequent `ECONNRESET` / "socket hang up" under load.
 -   **Event loop monitor** – The backend logs a warning when the event loop is delayed by more than 2 seconds (e.g. `[EventLoop] Delay detected: 5000ms`). Check logs before a hang to see if the process was under heavy load.
 -   **Database** – Optional `DATABASE_STATEMENT_TIMEOUT_SEC` (default 60) cancels long-running queries so connections are returned to the pool.
 -   **Polling** – Notifications and download status poll less frequently to ease load; if the backend is still unstable, consider increasing intervals in the frontend hooks.
@@ -980,9 +981,10 @@ Lidify wouldn't be possible without these services and projects:
 
 ### UI stuck on loading / "Failed to proxy … socket hang up"
 
-After long runs (e.g. many hours), the frontend may show a spinner and logs may show `Failed to proxy http://127.0.0.1:3006/api/… Error: socket hang up (ECONNRESET)`. This means the Node backend stopped responding to HTTP (crashed, stuck, or out of resources) while other processes (e.g. audio analyzer) may still be running.
+If the frontend shows a spinner and logs show `Failed to proxy http://127.0.0.1:3006/api/… Error: socket hang up (ECONNRESET)`, the Next.js proxy lost its connection to the backend. Common causes:
 
-**Fix:** Restart the stack so the backend and frontend come back up.
+-   **Idle connection closed** – The backend now keeps connections alive for 5 minutes to reduce this. If you still see it often, the backend may be under heavy load or the event loop blocked.
+-   **Backend crashed or hung** – Check backend logs for `[EventLoop] Delay detected` or `[RequestTimeout]` before the errors. Restart the stack so the backend and frontend come back up.
 
 ```bash
 docker compose restart

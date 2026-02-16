@@ -269,10 +269,12 @@ async function checkPasswordReset() {
 }
 
 const server = app.listen(config.port, "0.0.0.0", async () => {
-    // Prevent connections from staying open indefinitely (e.g. stuck uploads)
+    // Request timeout for stuck handlers (upload, long DB ops)
     server.timeout = 120 * 1000; // 2 minutes
-    server.keepAliveTimeout = 65 * 1000; // Slightly above typical load balancer (60s)
-    server.headersTimeout = 66 * 1000; // Must be > keepAliveTimeout
+    // Keep-alive: use 5min so Next.js proxy (same container) doesn't reuse a connection
+    // the backend already closed (65s default caused ECONNRESET / "socket hang up" under load).
+    server.keepAliveTimeout = 300 * 1000; // 5 minutes
+    server.headersTimeout = 301 * 1000; // Must be > keepAliveTimeout
 
     // Verify database connections before proceeding
     await checkPostgresConnection();
