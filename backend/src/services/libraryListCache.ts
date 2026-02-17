@@ -13,6 +13,8 @@ import { logger } from "../utils/logger";
 
 const CACHE_KEY_PREFIX = "lib:albums:owned:ids:";
 const TTL_SEC = 5 * 60; // 5 minutes
+/** Cap cached IDs to avoid huge JSON and long sync work / GC in the API when reading cache */
+const MAX_CACHED_IDS = 50_000;
 const SORT_OPTIONS = ["name", "name-desc", "recent"] as const;
 
 function cacheKey(sortBy: string): string {
@@ -37,6 +39,7 @@ export async function refreshOwnedAlbumsCache(sortBy: string): Promise<number> {
         WHERE EXISTS (SELECT 1 FROM "Track" t WHERE t."albumId" = a.id)
         AND (a.location = 'LIBRARY' OR a."rgMbid" IN (SELECT "rgMbid" FROM "OwnedAlbum"))
         ORDER BY ${orderClause}
+        LIMIT ${MAX_CACHED_IDS}
     `;
 
     const ids = rows.map((r) => r.id);
@@ -80,7 +83,8 @@ export async function getCachedOwnedAlbumIds(sortBy: string): Promise<string[] |
         const raw = await redisClient.get(key);
         if (!raw) return null;
         const ids = JSON.parse(raw) as string[];
-        return Array.isArray(ids) ? ids : null;
+        if (!Array.isArray(ids) || ids.length > MAX_CACHED_IDS) return null;
+        return ids;
     } catch {
         return null;
     }

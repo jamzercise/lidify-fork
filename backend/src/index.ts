@@ -99,6 +99,19 @@ app.use(
 );
 app.use(express.json({ limit: "1mb" })); // Increased from 100KB default to support large queue payloads
 
+// Track current request for event-loop delay diagnostics (which handler was running when the loop blocked)
+let currentRequestInfo: { method: string; path: string; at: number } | null = null;
+app.use((req, res, next) => {
+    currentRequestInfo = { method: req.method, path: req.path, at: Date.now() };
+    res.once("finish", () => {
+        currentRequestInfo = null;
+    });
+    res.once("close", () => {
+        currentRequestInfo = null;
+    });
+    next();
+});
+
 // Session
 // Trust proxy for reverse proxy setups (nginx, traefik, etc.)
 // Set to true to trust all proxies in the chain (common in Docker/Portainer setups)
@@ -476,7 +489,12 @@ setInterval(() => {
     const delay = now - eventLoopCheckExpected;
     eventLoopCheckExpected = now + EVENT_LOOP_CHECK_MS;
     if (delay > EVENT_LOOP_WARN_THRESHOLD_MS) {
-        logger.warn(`[EventLoop] Delay detected: ${delay}ms (expected ~${EVENT_LOOP_CHECK_MS}ms). Backend may be under heavy load or blocked.`);
+        const reqInfo = currentRequestInfo
+            ? ` Request in progress: ${currentRequestInfo.method} ${currentRequestInfo.path} (started ${now - currentRequestInfo.at}ms ago).`
+            : " (no request in progress when checked)";
+        logger.warn(
+            `[EventLoop] Delay detected: ${delay}ms (expected ~${EVENT_LOOP_CHECK_MS}ms). Backend event loop was blocked.${reqInfo}`
+        );
     }
 }, EVENT_LOOP_CHECK_MS);
 
