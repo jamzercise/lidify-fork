@@ -69,5 +69,17 @@ queues.forEach((queue) => {
     });
 });
 
+// Close all queues (for API process shutdown; worker process uses shutdownWorkers() instead)
+export async function closeAllQueues(): Promise<void> {
+    await Promise.all([
+        scanQueue.close(),
+        discoverQueue.close(),
+        imageQueue.close(),
+        validationQueue.close(),
+        analysisQueue.close(),
+    ]);
+    logger.debug("Bull queues closed");
+}
+
 // Log queue initialization
 logger.debug("Bull queues initialized with stability settings");

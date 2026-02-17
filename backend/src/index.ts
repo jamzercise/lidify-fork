@@ -299,10 +299,7 @@ const server = app.listen(config.port, "0.0.0.0", async () => {
     const { initializeMusicConfig } = await import("./config");
     await initializeMusicConfig();
 
-    // Initialize Bull queue workers
-    await import("./workers");
-
-    // Set up Bull Board dashboard
+    // Bull Board dashboard (queues are used by API to add jobs; processors run in separate worker process)
     const { createBullBoard } = await import("@bull-board/api");
     const { BullAdapter } = await import("@bull-board/api/bullAdapter");
     const { ExpressAdapter } = await import("@bull-board/express");
@@ -419,7 +416,7 @@ const server = app.listen(config.port, "0.0.0.0", async () => {
     }
 
     // Auto-backfill artist counts if needed (for library filtering performance)
-    // This runs in the background and doesn't block startup
+    // Runs in background; no delay so library filtering is accurate soon after startup
     (async () => {
         try {
             const { isBackfillNeeded, backfillAllArtistCounts } = await import(
@@ -444,27 +441,30 @@ const server = app.listen(config.port, "0.0.0.0", async () => {
     })();
 
     // Auto-backfill images if needed (download external URLs locally)
-    // This runs in the background and doesn't block startup
-    (async () => {
-        try {
-            const { isImageBackfillNeeded, backfillAllImages } = await import(
-                "./services/imageBackfill"
-            );
-            const status = await isImageBackfillNeeded();
-            if (status.needed) {
-                logger.info(
-                    `[STARTUP] Image backfill needed: ${status.artistsWithExternalUrls} artists, ${status.albumsWithExternalUrls} albums with external URLs`
+    // Staggered by 3 minutes so it doesn't run in parallel with artist-counts backfill (reduces DB/network contention at startup)
+    const IMAGE_BACKFILL_DELAY_MS = 3 * 60 * 1000;
+    setTimeout(() => {
+        (async () => {
+            try {
+                const { isImageBackfillNeeded, backfillAllImages } = await import(
+                    "./services/imageBackfill"
                 );
-                await backfillAllImages();
-                logger.info("[STARTUP] Image backfill complete");
-            } else {
-                logger.debug("[STARTUP] All images already stored locally");
+                const status = await isImageBackfillNeeded();
+                if (status.needed) {
+                    logger.info(
+                        `[STARTUP] Image backfill needed: ${status.artistsWithExternalUrls} artists, ${status.albumsWithExternalUrls} albums with external URLs`
+                    );
+                    await backfillAllImages();
+                    logger.info("[STARTUP] Image backfill complete");
+                } else {
+                    logger.debug("[STARTUP] All images already stored locally");
+                }
+            } catch (err) {
+                logger.error("[STARTUP] Image backfill failed:", err);
+                // Non-fatal - backfill can be triggered manually via API
             }
-        } catch (err) {
-            logger.error("[STARTUP] Image backfill failed:", err);
-            // Non-fatal - backfill can be triggered manually via API
-        }
-    })();
+        })();
+    }, IMAGE_BACKFILL_DELAY_MS);
 });
 
 // Event loop delay monitor - logs when the loop is blocked (helps diagnose "backend hung" issues)
@@ -493,9 +493,9 @@ async function gracefulShutdown(signal: string) {
     logger.debug(`\nReceived ${signal}. Starting graceful shutdown...`);
 
     try {
-        // Shutdown workers (intervals, crons, queues)
-        const { shutdownWorkers } = await import("./workers");
-        await shutdownWorkers();
+        // Close Bull queues (API only adds jobs; worker process runs the processors)
+        const { closeAllQueues } = await import("./workers/queues");
+        await closeAllQueues();
 
         // Close Redis connection
         logger.debug("Closing Redis connection...");

@@ -22,6 +22,9 @@ import { organizeSingles } from "../workers/organizeSingles";
 import { extractColorsFromImage } from "../utils/colorExtractor";
 import { dataCacheService } from "../services/dataCache";
 import {
+    getCachedOwnedAlbumIds,
+} from "../services/libraryListCache";
+import {
     backfillAllArtistCounts,
     isBackfillNeeded,
     getBackfillProgress,
@@ -1392,6 +1395,7 @@ router.get("/artists/:id", async (req, res) => {
 });
 
 // GET /library/albums?artistId=&limit=&offset=&filter=owned|discovery|all
+// For filter=owned we use a raw subquery to avoid loading all OwnedAlbum rgMbids into Node (root cause of backend hang on large libraries).
 router.get("/albums", async (req, res) => {
     try {
         const {
@@ -1409,38 +1413,104 @@ router.get("/albums", async (req, res) => {
 
         const orderBy = ALBUM_SORT_MAP[sortBy as string] ?? { title: "asc" as const };
 
+        if (filter === "owned") {
+            // When no artist filter, try precomputed cache first (worker refreshes every 5 min).
+            if (!artistId) {
+                const cachedIds = await getCachedOwnedAlbumIds(sortBy as string);
+                if (cachedIds && cachedIds.length >= 0) {
+                    const total = cachedIds.length;
+                    const pageIds = cachedIds.slice(offset, offset + limit);
+                    const albumsData = pageIds.length
+                        ? await prisma.album.findMany({
+                              where: { id: { in: pageIds } },
+                              include: {
+                                  artist: {
+                                      select: {
+                                          id: true,
+                                          mbid: true,
+                                          name: true,
+                                      },
+                                  },
+                              },
+                          })
+                        : [];
+                    const idOrder = new Map(pageIds.map((id, i) => [id, i]));
+                    const sorted = (albumsData as typeof albumsData).sort(
+                        (a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0)
+                    );
+                    const albums = sorted.map((album) => ({
+                        ...album,
+                        coverArt: album.coverUrl,
+                    }));
+                    return res.json({ albums, total, offset, limit });
+                }
+            }
+
+            // Cache miss or artistId filter: use raw SQL (no unbounded load into Node).
+            const orderClause =
+                sortBy === "name-desc"
+                    ? Prisma.raw('a."title" DESC')
+                    : sortBy === "recent"
+                      ? Prisma.raw('a."year" DESC NULLS LAST')
+                      : Prisma.raw('a."title" ASC');
+
+            const idsResult = await prisma.$queryRaw<{ id: string }[]>`
+                SELECT a.id
+                FROM "Album" a
+                WHERE EXISTS (SELECT 1 FROM "Track" t WHERE t."albumId" = a.id)
+                AND (a.location = 'LIBRARY' OR a."rgMbid" IN (SELECT "rgMbid" FROM "OwnedAlbum"))
+                ${artistId ? Prisma.sql`AND a."artistId" = ${artistId as string}` : Prisma.empty}
+                ORDER BY ${orderClause}
+                LIMIT ${limit}
+                OFFSET ${offset}
+            `;
+            const ids = idsResult.map((r) => r.id);
+
+            const [albumsData, totalResult] = await Promise.all([
+                ids.length > 0
+                    ? prisma.album.findMany({
+                          where: { id: { in: ids } },
+                          include: {
+                              artist: {
+                                  select: {
+                                      id: true,
+                                      mbid: true,
+                                      name: true,
+                                  },
+                              },
+                          },
+                      })
+                    : Promise.resolve([]),
+                prisma.$queryRaw<[{ count: bigint }]>`
+                    SELECT COUNT(*)::bigint as count
+                    FROM "Album" a
+                    WHERE EXISTS (SELECT 1 FROM "Track" t WHERE t."albumId" = a.id)
+                    AND (a.location = 'LIBRARY' OR a."rgMbid" IN (SELECT "rgMbid" FROM "OwnedAlbum"))
+                    ${artistId ? Prisma.sql`AND a."artistId" = ${artistId as string}` : Prisma.empty}
+                `,
+            ]);
+
+            const total = Number(totalResult[0]?.count ?? 0);
+            const idOrder = new Map(ids.map((id, i) => [id, i]));
+            const sorted = (albumsData as typeof albumsData).sort(
+                (a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0)
+            );
+            const albums = sorted.map((album) => ({
+                ...album,
+                coverArt: album.coverUrl,
+            }));
+
+            return res.json({ albums, total, offset, limit });
+        }
+
         let where: any = {
             tracks: { some: {} }, // Only albums with tracks
         };
-
-        // Apply location filter
-        if (filter === "owned") {
-            // Get all owned album rgMbids (includes liked discovery albums)
-            const ownedAlbumMbids = await prisma.ownedAlbum.findMany({
-                select: { rgMbid: true },
-            });
-            const ownedMbids = ownedAlbumMbids.map((oa) => oa.rgMbid);
-
-            // Albums with LIBRARY location OR rgMbid in OwnedAlbum
-            where.OR = [
-                { location: "LIBRARY", tracks: { some: {} } },
-                { rgMbid: { in: ownedMbids }, tracks: { some: {} } },
-            ];
-        } else if (filter === "discovery") {
+        if (filter === "discovery") {
             where.location = "DISCOVER";
         }
-        // filter === "all" shows all locations
-
-        // If artistId is provided, filter by artist
         if (artistId) {
-            if (where.OR) {
-                // If we have OR conditions, wrap with AND
-                where = {
-                    AND: [{ OR: where.OR }, { artistId: artistId as string }],
-                };
-            } else {
-                where.artistId = artistId as string;
-            }
+            where.artistId = artistId as string;
         }
 
         const [albumsData, total] = await Promise.all([
@@ -1462,7 +1532,6 @@ router.get("/albums", async (req, res) => {
             prisma.album.count({ where }),
         ]);
 
-        // Normalize coverArt field for frontend
         const albums = albumsData.map((album) => ({
             ...album,
             coverArt: album.coverUrl,
@@ -2811,11 +2880,15 @@ router.delete("/artists/:id", async (req, res) => {
  * GET /library/genres
  * Get list of genres in the library with track counts
  */
+// Cap to avoid loading entire library into memory (root cause of backend hang on large libraries)
+const GENRES_ARTIST_NAMES_CAP = 5000;
+
 router.get("/genres", async (req, res) => {
     try {
-        // Get artist names to filter them out of genres (they sometimes get incorrectly tagged)
+        // Get artist names to filter them out of genres (capped to avoid unbounded query)
         const artists = await prisma.artist.findMany({
             select: { name: true, normalizedName: true },
+            take: GENRES_ARTIST_NAMES_CAP,
         });
         const artistNames = new Set(
             artists.flatMap((a) =>
@@ -2869,35 +2942,31 @@ router.get("/genres", async (req, res) => {
  */
 router.get("/decades", async (req, res) => {
     try {
-        // Get all albums with year fields and track count
-        const albums = await prisma.album.findMany({
-            select: {
-                year: true,
-                originalYear: true,
-                displayYear: true,
-                _count: { select: { tracks: true } },
-            },
-        });
+        // Compute decades in the database to avoid loading all albums into Node (unbounded query caused backend hang).
+        const decadeRows = await prisma.$queryRaw<
+            { decade_start: number; track_count: bigint }[]
+        >`
+            SELECT
+                (FLOOR(COALESCE(a."displayYear", a."originalYear", a."year", 0) / 10) * 10)::int AS decade_start,
+                COUNT(t.id)::bigint AS track_count
+            FROM "Album" a
+            JOIN "Track" t ON t."albumId" = a.id
+            WHERE COALESCE(a."displayYear", a."originalYear", a."year") IS NOT NULL
+            AND COALESCE(a."displayYear", a."originalYear", a."year") > 0
+            GROUP BY decade_start
+            HAVING COUNT(t.id) >= 15
+            ORDER BY decade_start ASC
+        `;
 
-        // Group by decade using effective year (displayYear > originalYear > year)
         const decadeMap = new Map<number, number>();
-
-        for (const album of albums) {
-            const effectiveYear = getEffectiveYear(album);
-            if (effectiveYear) {
-                const decadeStart = getDecadeFromYear(effectiveYear);
-                decadeMap.set(
-                    decadeStart,
-                    (decadeMap.get(decadeStart) || 0) + album._count.tracks
-                );
-            }
+        for (const row of decadeRows) {
+            decadeMap.set(row.decade_start, Number(row.track_count));
         }
 
-        // Convert to array, filter by minimum tracks, and sort by decade
+        // Build response in same shape as before (array of { decade, count }), newest first
         const decades = Array.from(decadeMap.entries())
             .map(([decade, count]) => ({ decade, count }))
-            .filter((d) => d.count >= 15) // Minimum 15 tracks for a radio station
-            .sort((a, b) => b.decade - a.decade); // Newest first
+            .sort((a, b) => b.decade - a.decade);
 
         res.json({ decades });
     } catch (error) {

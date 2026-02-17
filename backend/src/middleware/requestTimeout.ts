@@ -8,13 +8,28 @@ const timeoutMs =
         : DEFAULT_TIMEOUT_MS;
 const effectiveTimeout = Number.isNaN(timeoutMs) || timeoutMs <= 0 ? DEFAULT_TIMEOUT_MS : Math.min(timeoutMs, 300000);
 
+/** Stricter timeout for list endpoints so they never hold connections for minutes (default 15s). */
+const LIST_ENDPOINT_TIMEOUT_MS = 15 * 1000;
+
+/** Paths that get the shorter list timeout (GET only). */
+const LIST_PATHS: string[] = [
+    "/api/library/albums",
+    "/api/library/artists",
+];
+
+function getTimeoutForPath(path: string, method: string): number {
+    if (method !== "GET") return effectiveTimeout;
+    const isListPath = LIST_PATHS.some((p) => path === p);
+    return isListPath ? LIST_ENDPOINT_TIMEOUT_MS : effectiveTimeout;
+}
+
 /**
  * Request timeout middleware.
  * If the handler doesn't respond within the timeout, respond with 503 and log.
  * Skips streaming, health, and docs endpoints.
+ * List endpoints (e.g. /api/library/albums, /api/library/artists) use a shorter timeout (15s).
  */
 export function requestTimeout(overrideMs?: number) {
-    const ms = overrideMs ?? effectiveTimeout;
     return (req: Request, res: Response, next: NextFunction) => {
         const path = req.path;
 
@@ -26,6 +41,8 @@ export function requestTimeout(overrideMs?: number) {
         ) {
             return next();
         }
+
+        const ms = overrideMs ?? getTimeoutForPath(path, req.method);
 
         let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
             timeoutId = null;

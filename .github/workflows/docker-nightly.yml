@@ -7,7 +7,7 @@ on:
             - "v*" # Don't trigger on version tags - docker-publish handles those
 
 env:
-    IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/lidify
+    IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/lidify-player
 
 jobs:
     build-nightly:

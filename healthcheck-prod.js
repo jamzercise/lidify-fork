@@ -1,12 +1,13 @@
-// Production health check script - checks frontend on port 3030
+// Production health check - hits /api/health so the backend is checked (Next.js proxies to 3006).
+// If the backend is hung, the proxy will fail and the container can be restarted.
 const http = require('http');
 
 const options = {
   hostname: 'localhost',
   port: 3030,
-  path: '/',
+  path: '/api/health',
   method: 'GET',
-  timeout: 5000,
+  timeout: 10000,
 };
 
 const req = http.request(options, (res) => {

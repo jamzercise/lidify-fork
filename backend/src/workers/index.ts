@@ -27,6 +27,11 @@ import { runDataIntegrityCheck } from "./dataIntegrity";
 import { simpleDownloadManager } from "../services/simpleDownloadManager";
 import { queueCleaner } from "../jobs/queueCleaner";
 import { enrichmentStateService } from "../services/enrichmentState";
+import {
+    startLibraryListCacheRefresh,
+    stopLibraryListCacheRefresh,
+    refreshAllOwnedAlbumsCache,
+} from "../services/libraryListCache";
 
 // Track intervals and timeouts for cleanup
 const intervals: NodeJS.Timeout[] = [];
@@ -96,11 +101,20 @@ startMoodBucketWorker().catch((err) => {
     logger.error("Failed to start mood bucket worker:", err);
 });
 
+// Precomputed library list cache (owned albums) – refresh every 5 min so GET /library/albums is fast
+startLibraryListCacheRefresh();
+refreshAllOwnedAlbumsCache().catch((err) => {
+    logger.warn("Initial library list cache refresh failed:", err);
+});
+
 // Event handlers for scan queue
 scanQueue.on("completed", (job, result) => {
     logger.debug(
         `Scan job ${job.id} completed: +${result.tracksAdded} ~${result.tracksUpdated} -${result.tracksRemoved}`
     );
+    refreshAllOwnedAlbumsCache().catch((err) => {
+        logger.warn("Library list cache refresh after scan failed:", err);
+    });
 });
 
 scanQueue.on("failed", (job, err) => {
@@ -351,6 +365,8 @@ export async function shutdownWorkers(): Promise<void> {
 
     // Stop mood bucket worker
     stopMoodBucketWorker();
+
+    stopLibraryListCacheRefresh();
 
     // Stop discover weekly cron
     stopDiscoverWeeklyCron();

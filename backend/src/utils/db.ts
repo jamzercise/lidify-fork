@@ -6,7 +6,7 @@ import { logger } from "./logger";
 // We explicitly set it for predictable behavior under load
 const parsedLimit = parseInt(process.env.DATABASE_POOL_SIZE || "20", 10);
 const parsedTimeout = parseInt(process.env.DATABASE_POOL_TIMEOUT || "30", 10);
-const statementTimeoutSec = parseInt(process.env.DATABASE_STATEMENT_TIMEOUT_SEC || "60", 10);
+const statementTimeoutSec = parseInt(process.env.DATABASE_STATEMENT_TIMEOUT_SEC || "30", 10);
 const connectionLimit = Number.isNaN(parsedLimit) ? 20 : parsedLimit;
 const poolTimeout = Number.isNaN(parsedTimeout) ? 30 : parsedTimeout;
 

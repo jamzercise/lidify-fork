@@ -892,10 +892,10 @@ Monitor background job queues at `/admin/queues`:
 
 If the frontend shows "socket hang up" or the API stops responding (e.g. after many hours), the backend may be overloaded or the event loop blocked. The following help reduce hangups and aid diagnosis:
 
--   **Request timeout** – API handlers are limited to 90 seconds by default. You can increase this with `REQUEST_TIMEOUT_MS` (e.g. `120000` for 2 minutes). Requests that exceed the limit receive 503 so connections don’t pile up.
+-   **Request timeout** – API handlers are limited to 90 seconds by default (`REQUEST_TIMEOUT_MS`). List endpoints (`/api/library/albums`, `/api/library/artists`) use a stricter 15s timeout so they never hold connections for minutes.
 -   **Keep-alive** – The backend keeps HTTP connections alive for 5 minutes so the Next.js proxy (same container) doesn’t reuse a connection the backend already closed, which previously caused frequent `ECONNRESET` / "socket hang up" under load.
 -   **Event loop monitor** – The backend logs a warning when the event loop is delayed by more than 2 seconds (e.g. `[EventLoop] Delay detected: 5000ms`). Check logs before a hang to see if the process was under heavy load.
--   **Database** – Optional `DATABASE_STATEMENT_TIMEOUT_SEC` (default 60) cancels long-running queries so connections are returned to the pool.
+-   **Database** – Optional `DATABASE_STATEMENT_TIMEOUT_SEC` (default 30) cancels long-running queries so connections are returned to the pool. Optional `DATABASE_POOL_SIZE` (default 20) and `DATABASE_POOL_TIMEOUT` (default 30s) tune the connection pool.
 -   **Polling** – Notifications and download status poll less frequently to ease load; if the backend is still unstable, consider increasing intervals in the frontend hooks.
 
 ---

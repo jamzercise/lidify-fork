@@ -263,6 +263,19 @@ stderr_logfile_maxbytes=0
 directory=/app/backend
 priority=30
 
+[program:backend-worker]
+command=/bin/bash -c "/app/wait-for-db.sh 120 && cd /app/backend && node dist/workerEntry.js"
+autostart=true
+autorestart=true
+startretries=3
+startsecs=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+directory=/app/backend
+priority=35
+
 [program:frontend]
 command=/bin/bash -c "sleep 10 && cd /app/frontend && npm start"
 autostart=true
