@@ -155,6 +155,7 @@ router.get("/", async (req, res) => {
                 // Don't return the actual key for security!
             },
             orderBy: { createdAt: "desc" },
+            take: 100, // Safety cap per user
         });
 
         res.json({ apiKeys: keys });

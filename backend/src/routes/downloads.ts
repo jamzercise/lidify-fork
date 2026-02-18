@@ -598,6 +598,7 @@ router.get("/failed", async (req, res) => {
         const failedAlbums = await prisma.unavailableAlbum.findMany({
             where: { userId },
             orderBy: { createdAt: "desc" },
+            take: 500, // Cap to avoid unbounded load and event-loop block
         });
 
         res.json(failedAlbums);

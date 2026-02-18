@@ -91,6 +91,7 @@ router.get("/for-you", async (req, res) => {
         const ownedArtists = await prisma.ownedAlbum.findMany({
             select: { artistId: true },
             distinct: ["artistId"],
+            take: 50_000, // Cap to avoid unbounded load on huge libraries
         });
         const ownedArtistIds = new Set(ownedArtists.map((a) => a.artistId));
 

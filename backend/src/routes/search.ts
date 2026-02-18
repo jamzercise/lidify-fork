@@ -173,6 +173,7 @@ router.get("/genres", async (req, res) => {
     try {
         const genres = await prisma.genre.findMany({
             orderBy: { name: "asc" },
+            take: 2000, // Safety cap (genre list is usually small)
             include: {
                 _count: {
                     select: { trackGenres: true },

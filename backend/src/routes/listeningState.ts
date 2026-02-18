@@ -90,11 +90,15 @@ router.get("/recent", async (req, res) => {
     try {
         const userId = req.session.userId!;
         const { limit = "10" } = req.query;
+        const take = Math.min(
+            Math.max(1, parseInt(limit as string, 10) || 10),
+            100
+        );
 
         const states = await prisma.listeningState.findMany({
             where: { userId },
             orderBy: { updatedAt: "desc" },
-            take: parseInt(limit as string, 10),
+            take,
         });
 
         res.json(states);

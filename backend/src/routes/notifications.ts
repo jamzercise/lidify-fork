@@ -186,6 +186,7 @@ router.get(
                     status: { in: ["pending", "processing"] },
                 },
                 orderBy: { createdAt: "desc" },
+                take: 200, // Cap to avoid unbounded load
             });
             res.json(downloads);
         } catch (error: any) {

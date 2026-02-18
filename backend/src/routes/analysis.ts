@@ -289,7 +289,8 @@ router.get("/track/:trackId", requireAuth, async (req, res) => {
  */
 router.get("/features", requireAuth, async (req, res) => {
     try {
-        // Get analyzed tracks
+        // Sample analyzed tracks (cap to avoid loading 100k+ rows and blocking event loop)
+        const FEATURES_SAMPLE_CAP = 20_000;
         const analyzed = await prisma.track.findMany({
             where: {
                 analysisStatus: "completed",
@@ -302,6 +303,8 @@ router.get("/features", requireAuth, async (req, res) => {
                 valence: true,
                 keyScale: true,
             },
+            orderBy: { id: "asc" }, // Deterministic so stats are stable across requests
+            take: FEATURES_SAMPLE_CAP,
         });
 
         if (analyzed.length === 0) {

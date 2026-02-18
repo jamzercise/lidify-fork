@@ -214,7 +214,10 @@ router.get("/recently-listened", async (req, res) => {
     try {
         const { limit = "10" } = req.query;
         const userId = req.user!.id;
-        const limitNum = parseInt(limit as string, 10);
+        const limitNum = Math.min(
+            Math.max(1, parseInt(limit as string, 10) || 10),
+            100
+        ); // Cap so take values stay bounded (e.g. limitNum * 3 for plays)
 
         const [recentPlays, inProgressAudiobooks, inProgressPodcasts] =
             await Promise.all([
@@ -402,7 +405,10 @@ router.get("/recently-listened", async (req, res) => {
 router.get("/recently-added", async (req, res) => {
     try {
         const { limit = "10" } = req.query;
-        const limitNum = parseInt(limit as string, 10);
+        const limitNum = Math.min(
+            Math.max(1, parseInt(limit as string, 10) || 10),
+            100
+        ); // Cap to avoid large takes on recently-added
 
         // Get the 20 most recently added LIBRARY albums (by lastSynced timestamp)
         // This limits "Recently Added" to actual recent additions, not the entire library
