@@ -3633,36 +3633,45 @@ router.get("/radio", async (req, res) => {
                     sourceTrack.valence;
 
                 if (hasAudioData) {
-                    // Get all analyzed tracks (excluding source) - include Enhanced mode fields
-                    const analyzedTracks = await prisma.track.findMany({
-                        where: {
-                            id: { not: sourceTrackId },
-                            analysisStatus: "completed",
-                        },
-                        select: {
-                            id: true,
-                            bpm: true,
-                            energy: true,
-                            valence: true,
-                            arousal: true,
-                            danceability: true,
-                            keyScale: true,
-                            moodTags: true,
-                            lastfmTags: true,
-                            essentiaGenres: true,
-                            instrumentalness: true,
-                            // Enhanced mode fields (all 7 ML mood predictions)
-                            moodHappy: true,
-                            moodSad: true,
-                            moodRelaxed: true,
-                            moodAggressive: true,
-                            moodParty: true,
-                            moodAcoustic: true,
-                            moodElectronic: true,
-                            danceabilityMl: true,
-                            analysisMode: true,
-                        },
-                    });
+                    // Random subset of analyzed tracks (capped to avoid loading 100k+ rows and blocking event loop 30+ min)
+                    const VIBE_ANALYZED_CAP = 15_000;
+                    const randomAnalyzedIds = await prisma.$queryRaw<
+                        { id: string }[]
+                    >`
+                        SELECT id FROM "Track"
+                        WHERE id != ${sourceTrackId} AND "analysisStatus" = 'completed'
+                        ORDER BY RANDOM()
+                        LIMIT ${VIBE_ANALYZED_CAP}
+                    `;
+                    const ids = randomAnalyzedIds.map((r) => r.id);
+                    const analyzedTracks =
+                        ids.length === 0
+                            ? []
+                            : await prisma.track.findMany({
+                                  where: { id: { in: ids } },
+                                  select: {
+                                      id: true,
+                                      bpm: true,
+                                      energy: true,
+                                      valence: true,
+                                      arousal: true,
+                                      danceability: true,
+                                      keyScale: true,
+                                      moodTags: true,
+                                      lastfmTags: true,
+                                      essentiaGenres: true,
+                                      instrumentalness: true,
+                                      moodHappy: true,
+                                      moodSad: true,
+                                      moodRelaxed: true,
+                                      moodAggressive: true,
+                                      moodParty: true,
+                                      moodAcoustic: true,
+                                      moodElectronic: true,
+                                      danceabilityMl: true,
+                                      analysisMode: true,
+                                  },
+                              });
 
                     logger.debug(
                         `[Radio:vibe] Found ${analyzedTracks.length} analyzed tracks to compare`
@@ -4078,12 +4087,16 @@ router.get("/radio", async (req, res) => {
                 break;
 
             case "all":
-            default:
-                // Random selection from all tracks in library
-                const allTracks = await prisma.track.findMany({
-                    select: { id: true },
-                });
-                trackIds = allTracks.map((t) => t.id);
+            default: {
+                // Random selection from library via DB (never load all IDs - was blocking event loop 30+ min on large libraries)
+                const randomIds = await prisma.$queryRaw<{ id: string }[]>`
+                    SELECT id FROM "Track"
+                    ORDER BY RANDOM()
+                    LIMIT ${limitNum}
+                `;
+                trackIds = randomIds.map((r) => r.id);
+                break;
+            }
         }
 
         // For vibe mode, keep the sorted order (by match score)

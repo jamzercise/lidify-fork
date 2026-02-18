@@ -728,6 +728,11 @@ router.get("/", async (req, res) => {
             includeCleared = "false",
         } = req.query;
 
+        const rawLimit = Math.min(
+            Math.max(1, parseInt(limit as string, 10) || 50),
+            500
+        );
+
         const where: any = { userId };
         if (status) {
             where.status = status as string;
@@ -740,7 +745,7 @@ router.get("/", async (req, res) => {
         const jobs = await prisma.downloadJob.findMany({
             where,
             orderBy: { createdAt: "desc" },
-            take: parseInt(limit as string, 10),
+            take: rawLimit,
         });
 
         // Filter out discovery downloads unless explicitly requested
