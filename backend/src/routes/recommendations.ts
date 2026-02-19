@@ -3,6 +3,7 @@ import { logger } from "../utils/logger";
 import { requireAuth, requireAuthOrToken } from "../middleware/auth";
 import { prisma } from "../utils/db";
 import { lastFmService } from "../services/lastfm";
+import { resolveTrackReferences } from "../services/jellyfin";
 
 const router = Router();
 
@@ -15,31 +16,22 @@ router.get("/for-you", async (req, res) => {
         const userId = req.user!.id;
         const limitNum = parseInt(limit as string, 10);
 
-        // Get user's most played artists
         const recentPlays = await prisma.play.findMany({
             where: { userId },
             orderBy: { playedAt: "desc" },
             take: 50,
-            include: {
-                track: {
-                    include: {
-                        album: {
-                            include: {
-                                artist: true,
-                            },
-                        },
-                    },
-                },
-            },
         });
+        const trackIds = recentPlays.map((p) => p.trackId).filter(Boolean);
+        const resolved = await resolveTrackReferences(trackIds);
 
-        // Count plays per artist
         const artistPlayCounts = new Map<
             string,
             { artist: any; count: number }
         >();
-        for (const play of recentPlays) {
-            const artist = play.track.album.artist;
+        for (let i = 0; i < recentPlays.length; i++) {
+            const track = resolved[i];
+            if (!track?.artist) continue;
+            const artist = track.artist;
             const existing = artistPlayCounts.get(artist.id);
             if (existing) {
                 existing.count++;
@@ -48,19 +40,18 @@ router.get("/for-you", async (req, res) => {
             }
         }
 
-        // Sort by play count and get top 3 seed artists
         const topArtists = Array.from(artistPlayCounts.values())
             .sort((a, b) => b.count - a.count)
             .slice(0, 3);
 
         if (topArtists.length === 0) {
-            // No listening history, return empty recommendations
             return res.json({ artists: [] });
         }
 
-        // Get similar artists for each top artist
+        // Similar artists only for native artists (Prisma); Jellyfin artists have no SimilarArtist records
         const allSimilarArtists = await Promise.all(
             topArtists.map(async ({ artist }) => {
+                if (artist.id.startsWith("jellyfin:")) return [];
                 const similar = await prisma.similarArtist.findMany({
                     where: { fromArtistId: artist.id },
                     orderBy: { weight: "desc" },

@@ -837,19 +837,11 @@ export class ProgrammaticPlaylistService {
     async generateArtistSimilarMix(
         userId: string
     ): Promise<ProgrammaticMix | null> {
-        // Get most played artist from last 7 days
         const recentPlays = await prisma.play.findMany({
             where: {
                 userId,
                 playedAt: {
                     gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-                },
-            },
-            include: {
-                track: {
-                    include: {
-                        album: { select: { artistId: true } },
-                    },
                 },
             },
         });
@@ -862,20 +854,29 @@ export class ProgrammaticPlaylistService {
             return null;
         }
 
-        // Count plays by artist
+        const { resolveTrackReferences } = await import("./jellyfin");
+        const resolved = await resolveTrackReferences(
+            recentPlays.map((p) => p.trackId).filter(Boolean)
+        );
         const artistPlayCounts = new Map<string, number>();
-        recentPlays.forEach((play) => {
-            const artistId = play.track.album.artistId;
+        for (let i = 0; i < recentPlays.length; i++) {
+            const artistId = resolved[i]?.artist?.id;
+            if (!artistId) continue;
             artistPlayCounts.set(
                 artistId,
                 (artistPlayCounts.get(artistId) || 0) + 1
             );
-        });
+        }
 
-        // Get top artist
-        const topArtistId = Array.from(artistPlayCounts.entries()).sort(
+        const sorted = Array.from(artistPlayCounts.entries()).sort(
             (a, b) => b[1] - a[1]
-        )[0][0];
+        );
+        if (sorted.length === 0) return null;
+        const topArtistId = sorted[0][0];
+        if (topArtistId.startsWith("jellyfin:")) {
+            logger.debug(`[ARTIST SIMILAR MIX] Top artist is Jellyfin; skip native similar`);
+            return null;
+        }
 
         const topArtist = await prisma.artist.findUnique({
             where: { id: topArtistId },

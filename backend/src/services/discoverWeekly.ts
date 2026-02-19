@@ -2599,30 +2599,30 @@ export class DiscoverWeeklyService {
      */
     private async getUserTopGenres(userId: string): Promise<string[]> {
         try {
-            // Get recent plays with artist info
             const recentPlays = await prisma.play.findMany({
                 where: {
                     userId,
-                    playedAt: { gte: subWeeks(new Date(), 12) }, // Last 3 months
-                },
-                include: {
-                    track: {
-                        include: {
-                            album: {
-                                include: { artist: true },
-                            },
-                        },
-                    },
+                    playedAt: { gte: subWeeks(new Date(), 12) },
                 },
                 take: 500,
             });
+            const nativeTrackIds = recentPlays
+                .map((p) => p.trackId)
+                .filter((id): id is string => !!id && !id.startsWith("jellyfin:"));
+            const tracksWithArtist = await prisma.track.findMany({
+                where: { id: { in: nativeTrackIds } },
+                include: {
+                    album: { include: { artist: true } },
+                },
+            });
+            const artistByTrackId = new Map(
+                tracksWithArtist.map((t) => [t.id, t.album?.artist])
+            );
 
-            // Collect genres from artists (stored as tags)
-            // MERGE canonical genres + user-added genres
             const genreCounts = new Map<string, number>();
 
             for (const play of recentPlays) {
-                const artist = play.track?.album?.artist;
+                const artist = artistByTrackId.get(play.trackId);
                 if (!artist) continue;
 
                 // Collect canonical genres

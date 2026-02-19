@@ -635,6 +635,25 @@ class ApiClient {
         return baseUrl;
     }
 
+    // Jellyfin Favorites (Lidifin)
+    async getFavorites() {
+        return this.request<{ tracks: ApiData[] }>("/library/favorites");
+    }
+
+    async addFavorite(trackId: string) {
+        return this.request<{ success: boolean; favorited: boolean }>(
+            `/library/favorites/${encodeURIComponent(trackId)}`,
+            { method: "POST" }
+        );
+    }
+
+    async removeFavorite(trackId: string) {
+        return this.request<{ success: boolean; favorited: boolean }>(
+            `/library/favorites/${encodeURIComponent(trackId)}`,
+            { method: "DELETE" }
+        );
+    }
+
     /**
      * Get the current token, lazily loading from localStorage if needed.
      * This handles the case where the singleton was created during SSR
@@ -935,6 +954,13 @@ class ApiClient {
 
     async testAudiobookshelf(url: string, apiKey: string) {
         return this.request<ServiceTestResult>("/system-settings/test-audiobookshelf", {
+            method: "POST",
+            body: JSON.stringify({ url, apiKey }),
+        });
+    }
+
+    async testJellyfin(url?: string, apiKey?: string) {
+        return this.request<ServiceTestResult>("/system-settings/test-jellyfin", {
             method: "POST",
             body: JSON.stringify({ url, apiKey }),
         });

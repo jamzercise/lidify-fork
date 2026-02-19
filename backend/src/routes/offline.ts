@@ -156,45 +156,39 @@ router.get("/albums", async (req, res) => {
     try {
         const userId = req.session.userId!;
 
-        // Get all cached tracks grouped by album
         const cachedTracks = await prisma.cachedTrack.findMany({
             where: { userId },
-            include: {
-                track: {
-                    include: {
-                        album: {
-                            include: {
-                                artist: {
-                                    select: {
-                                        id: true,
-                                        name: true,
-                                        mbid: true,
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
         });
+        const trackIds = cachedTracks.map((c) => c.trackId);
+        const { resolveTrackReferences } = await import("../services/jellyfin");
+        const resolved = await resolveTrackReferences(trackIds);
 
-        // Group by album
         const albumsMap = new Map();
 
-        for (const cached of cachedTracks) {
-            const albumId = cached.track.album.id;
-
+        for (let i = 0; i < cachedTracks.length; i++) {
+            const cached = cachedTracks[i];
+            const track = resolved[i];
+            if (!track) continue;
+            const albumId = track.album.id;
             if (!albumsMap.has(albumId)) {
                 albumsMap.set(albumId, {
-                    album: cached.track.album,
+                    album: {
+                        id: track.album.id,
+                        title: track.album.title,
+                        coverUrl: track.album.coverArt,
+                        artist: track.artist,
+                    },
                     tracks: [],
                     totalSizeMb: 0,
                 });
             }
-
             const albumData = albumsMap.get(albumId);
             albumData.tracks.push({
-                ...cached.track,
+                id: track.id,
+                title: track.title,
+                duration: track.duration,
+                artist: track.artist,
+                album: track.album,
                 cachedPath: cached.localPath,
                 cachedQuality: cached.quality,
                 cachedSizeMb: cached.fileSizeMb,
@@ -221,29 +215,27 @@ router.delete("/albums/:id", async (req, res) => {
         const userId = req.session.userId!;
         const albumId = req.params.id;
 
-        // Get all cached tracks for this album
         const cachedTracks = await prisma.cachedTrack.findMany({
-            where: {
-                userId,
-                track: {
-                    albumId,
-                },
-            },
+            where: { userId },
         });
+        const { resolveTrackReferences } = await import("../services/jellyfin");
+        const resolved = await resolveTrackReferences(
+            cachedTracks.map((c) => c.trackId)
+        );
+        const trackIdsToDelete = cachedTracks
+            .filter((_, i) => resolved[i]?.album?.id === albumId)
+            .map((c) => c.trackId);
 
-        // Delete all cached tracks for this album
         await prisma.cachedTrack.deleteMany({
             where: {
                 userId,
-                track: {
-                    albumId,
-                },
+                trackId: { in: trackIdsToDelete },
             },
         });
 
         res.json({
             message: "Album removed from cache",
-            deletedCount: cachedTracks.length,
+            deletedCount: trackIdsToDelete.length,
         });
     } catch (error) {
         logger.error("Delete cached album error:", error);

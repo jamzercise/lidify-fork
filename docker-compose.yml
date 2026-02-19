@@ -37,6 +37,8 @@ services:
 
             # Internal API secret for service-to-service auth
             INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-lidify-internal-secret-change-me}
+            # Jellyfin (Lidifin): env override for API key
+            JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
 
             # Lidarr webhook callback URL - how Lidarr can reach Lidify
             # Use backend:3006 for same-network communication, or external IP:3030 for external Lidarr

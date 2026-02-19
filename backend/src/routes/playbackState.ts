@@ -2,10 +2,11 @@ import express from "express";
 import { logger } from "../utils/logger";
 import { prisma, Prisma } from "../utils/db";
 import { requireAuth } from "../middleware/auth";
+import { resolveTrackReference, resolveTrackReferences } from "../services/jellyfin";
 
 const router = express.Router();
 
-// Get current playback state for the authenticated user
+// Get current playback state for the authenticated user (resolves track and queue to full track objects)
 router.get("/", requireAuth, async (req, res) => {
     try {
         const userId = req.user!.id;
@@ -18,7 +19,27 @@ router.get("/", requireAuth, async (req, res) => {
             return res.json(null);
         }
 
-        res.json(playbackState);
+        const state = playbackState as any;
+        let queue = state.queue as any[] | null;
+        if (Array.isArray(queue) && queue.length > 0) {
+            const ids = queue.map((i: any) => i?.id).filter(Boolean);
+            const resolved = await resolveTrackReferences(ids);
+            queue = resolved.map((r, i) =>
+                r
+                    ? {
+                          id: r.id,
+                          title: r.title,
+                          duration: r.duration,
+                          artist: r.artist,
+                          album: { id: r.album.id, title: r.album.title, coverArt: r.album.coverArt },
+                      }
+                    : queue![i]
+            );
+        }
+        return res.json({
+            ...state,
+            queue,
+        });
     } catch (error) {
         logger.error("Get playback state error:", error);
         res.status(500).json({ error: "Failed to get playback state" });

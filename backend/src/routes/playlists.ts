@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireAuthOrToken } from "../middleware/auth";
 import { prisma } from "../utils/db";
 import { sessionLog } from "../utils/playlistLogger";
+import { resolveTrackReference, resolveTrackReferences } from "../services/jellyfin";
 
 const router = Router();
 
@@ -47,22 +48,7 @@ router.get("/", async (req, res) => {
                     },
                 },
                 items: {
-                    include: {
-                        track: {
-                            include: {
-                                album: {
-                                    include: {
-                                        artist: {
-                                            select: {
-                                                id: true,
-                                                name: true,
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
+                    select: { id: true, playlistId: true, trackId: true, sort: true },
                     orderBy: { sort: "asc" },
                 },
             },
@@ -147,23 +133,6 @@ router.get("/:id", async (req, res) => {
                     select: { id: true },
                 },
                 items: {
-                    include: {
-                        track: {
-                            include: {
-                                album: {
-                                    include: {
-                                        artist: {
-                                            select: {
-                                                id: true,
-                                                name: true,
-                                                mbid: true,
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
                     orderBy: { sort: "asc" },
                 },
                 pendingTracks: {
@@ -181,18 +150,30 @@ router.get("/:id", async (req, res) => {
             return res.status(403).json({ error: "Access denied" });
         }
 
-        // Format playlist items
-        const formattedItems = playlist.items.map((item) => ({
-            ...item,
-            type: "track" as const,
-            track: {
-                ...item.track,
-                album: {
-                    ...item.track.album,
-                    coverArt: item.track.album.coverUrl,
-                },
-            },
-        }));
+        // Resolve track references (jellyfin:xxx or native cuid) to full track objects
+        const trackIds = playlist.items.map((i) => i.trackId);
+        const resolved = await resolveTrackReferences(trackIds);
+        const formattedItems = playlist.items.map((item, idx) => {
+            const track = resolved[idx];
+            return {
+                ...item,
+                type: "track" as const,
+                track: track
+                    ? {
+                          id: track.id,
+                          title: track.title,
+                          duration: track.duration,
+                          artist: track.artist,
+                          album: {
+                              id: track.album.id,
+                              title: track.album.title,
+                              coverUrl: track.album.coverArt,
+                              coverArt: track.album.coverArt,
+                          },
+                      }
+                    : null,
+            };
+        });
 
         // Format pending tracks
         const formattedPending = playlist.pendingTracks.map((pending) => ({
@@ -397,13 +378,19 @@ router.post("/:id/items", async (req, res) => {
             return res.status(403).json({ error: "Access denied" });
         }
 
-        // Check if track exists
-        const track = await prisma.track.findUnique({
-            where: { id: trackId },
-        });
-
-        if (!track) {
-            return res.status(404).json({ error: "Track not found" });
+        // Validate track exists (native: Prisma; jellyfin: resolve)
+        if (!trackId.startsWith("jellyfin:")) {
+            const track = await prisma.track.findUnique({
+                where: { id: trackId },
+            });
+            if (!track) {
+                return res.status(404).json({ error: "Track not found" });
+            }
+        } else {
+            const resolved = await resolveTrackReference(trackId);
+            if (!resolved) {
+                return res.status(404).json({ error: "Track not found" });
+            }
         }
 
         // Check if track already in playlist
@@ -433,20 +420,24 @@ router.post("/:id/items", async (req, res) => {
                 trackId,
                 sort: maxSort + 1,
             },
-            include: {
-                track: {
-                    include: {
-                        album: {
-                            include: {
-                                artist: true,
-                            },
-                        },
-                    },
-                },
-            },
         });
 
-        res.json(item);
+        const resolvedTrack = await resolveTrackReference(trackId);
+        res.json({
+            ...item,
+            track: resolvedTrack
+                ? {
+                      id: resolvedTrack.id,
+                      title: resolvedTrack.title,
+                      duration: resolvedTrack.duration,
+                      artist: resolvedTrack.artist,
+                      album: {
+                          ...resolvedTrack.album,
+                          coverUrl: resolvedTrack.album.coverArt,
+                      },
+                  }
+                : null,
+        });
     } catch (error) {
         if (error instanceof z.ZodError) {
             return res

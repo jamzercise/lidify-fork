@@ -45,6 +45,21 @@ import {
     getDecadeFromYear,
 } from "../utils/dateFilters";
 import { shuffleArray } from "../utils/shuffle";
+import {
+    getJellyfinConfig,
+    isJellyfinMusicSource,
+    getJellyfinArtists,
+    getJellyfinAlbums,
+    getJellyfinTracks,
+    resolveTrackReference,
+    getJellyfinStreamUrl,
+    addJellyfinFavorite,
+    removeJellyfinFavorite,
+    getJellyfinFavorites,
+} from "../services/jellyfin";
+
+const JELLYFIN_UNREACHABLE_MESSAGE =
+    "Jellyfin is slow or unreachable. Check your Jellyfin instance.";
 
 const router = Router();
 
@@ -133,6 +148,12 @@ router.use((req, res, next) => {
  */
 router.post("/scan", async (req, res) => {
     try {
+        if (await isJellyfinMusicSource()) {
+            return res.status(400).json({
+                error: "Library scan is not used when Jellyfin is the music source.",
+                jellyfin: true,
+            });
+        }
         if (!config.music.musicPath) {
             return res.status(500).json({
                 error: "Music path not configured. Please set MUSIC_PATH environment variable.",
@@ -224,36 +245,10 @@ router.get("/recently-listened", async (req, res) => {
                 prisma.play.findMany({
                     where: {
                         userId,
-                        // Exclude pure discovery plays (only show library and kept discovery)
                         source: { in: ["LIBRARY", "DISCOVERY_KEPT"] },
-                        // Also filter by album location to exclude discovery albums
-                        track: {
-                            album: {
-                                location: "LIBRARY",
-                            },
-                        },
                     },
                     orderBy: { playedAt: "desc" },
-                    take: limitNum * 3, // Get more than needed to account for duplicates
-                    include: {
-                        track: {
-                            include: {
-                                album: {
-                                    include: {
-                                        artist: {
-                                            select: {
-                                                id: true,
-                                                mbid: true,
-                                                name: true,
-                                                heroUrl: true,
-                                                userHeroUrl: true,
-                                            },
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
+                    take: limitNum * 3,
                 }),
                 prisma.audiobookProgress.findMany({
                     where: {
@@ -302,21 +297,32 @@ router.get("/recently-listened", async (req, res) => {
             })
             .slice(0, Math.ceil(limitNum / 3)); // Limit to 1/3 after deduplication
 
-        // Extract unique artists and audiobooks
+        // Resolve track references (jellyfin:xxx or native) for recent plays
+        const trackIds = recentPlays.map((p) => p.trackId).filter(Boolean);
+        const resolvedTracks = await resolveTrackReferences(trackIds);
+        const trackByIndex = new Map(
+            recentPlays.map((p, i) => [i, { play: p, track: resolvedTracks[i] }])
+        );
+
         const items: any[] = [];
         const artistsMap = new Map();
 
-        // Add music artists
-        for (const play of recentPlays) {
-            const artist = play.track.album.artist;
+        for (let i = 0; i < recentPlays.length; i++) {
+            const { play, track } = trackByIndex.get(i) ?? { play: recentPlays[i], track: null };
+            if (!track?.artist) continue;
+            const artist = track.artist;
             if (!artistsMap.has(artist.id)) {
                 artistsMap.set(artist.id, {
-                    ...artist,
+                    id: artist.id,
+                    name: artist.name,
+                    mbid: undefined,
+                    heroUrl: null,
+                    userHeroUrl: null,
                     type: "artist",
                     lastPlayedAt: play.playedAt,
                 });
             }
-            if (items.length >= limitNum) break;
+            if (artistsMap.size >= limitNum) break;
         }
 
         // Combine artists, audiobooks, and podcasts
@@ -493,6 +499,42 @@ router.get("/artists", async (req, res) => {
             MAX_LIMIT
         );
         const offset = parseInt(offsetParam as string, 10) || 0;
+
+        if (await isJellyfinMusicSource()) {
+            const cfg = await getJellyfinConfig();
+            if (!cfg) {
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+            try {
+                const artists = await getJellyfinArtists(cfg, {
+                    limit,
+                    offset,
+                    search: (query as string) || undefined,
+                });
+                return res.json({
+                    artists: artists.map((a) => ({
+                        id: a.id,
+                        name: a.name,
+                        heroUrl: null,
+                        coverArt: null,
+                        albumCount: 0,
+                        trackCount: 0,
+                    })),
+                    total: artists.length,
+                    offset,
+                    limit,
+                });
+            } catch (err: any) {
+                logger.warn("[Library] Jellyfin artists error:", err?.message);
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+        }
 
         const orderBy = ARTIST_SORT_MAP[sortBy as string] ?? { name: "asc" as const };
 
@@ -1417,6 +1459,42 @@ router.get("/albums", async (req, res) => {
         );
         const offset = parseInt(offsetParam as string, 10) || 0;
 
+        if (await isJellyfinMusicSource()) {
+            const cfg = await getJellyfinConfig();
+            if (!cfg) {
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+            try {
+                const albums = await getJellyfinAlbums(cfg, {
+                    limit,
+                    offset,
+                    artistId: (artistId as string) || undefined,
+                });
+                return res.json({
+                    albums: albums.map((a) => ({
+                        id: a.id,
+                        title: a.title,
+                        coverArt: a.coverArt,
+                        coverUrl: a.coverArt,
+                        artist: a.artist,
+                        year: a.year,
+                    })),
+                    total: albums.length,
+                    offset,
+                    limit,
+                });
+            } catch (err: any) {
+                logger.warn("[Library] Jellyfin albums error:", err?.message);
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+        }
+
         const orderBy = ALBUM_SORT_MAP[sortBy as string] ?? { title: "asc" as const };
 
         if (filter === "owned") {
@@ -1629,6 +1707,35 @@ router.get("/tracks", async (req, res) => {
             MAX_LIMIT
         );
         const offset = parseInt(offsetParam as string, 10) || 0;
+
+        if (await isJellyfinMusicSource()) {
+            const cfg = await getJellyfinConfig();
+            if (!cfg) {
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+            try {
+                const tracks = await getJellyfinTracks(cfg, {
+                    limit,
+                    offset,
+                    albumId: (albumId as string) || undefined,
+                });
+                return res.json({
+                    tracks,
+                    total: tracks.length,
+                    offset,
+                    limit,
+                });
+            } catch (err: any) {
+                logger.warn("[Library] Jellyfin tracks error:", err?.message);
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+        }
 
         let orderBy: any;
         if (albumId) {
@@ -2316,7 +2423,8 @@ router.get("/cover-art-colors", imageLimiter, async (req, res) => {
 // GET /library/tracks/:id/stream
 router.get("/tracks/:id/stream", async (req, res) => {
     try {
-        logger.debug("[STREAM] Request received for track:", req.params.id);
+        const trackId = req.params.id;
+        logger.debug("[STREAM] Request received for track:", trackId);
         const { quality } = req.query;
         const userId = req.user?.id;
 
@@ -2325,8 +2433,34 @@ router.get("/tracks/:id/stream", async (req, res) => {
             return res.status(401).json({ error: "Unauthorized" });
         }
 
+        if (trackId.startsWith("jellyfin:")) {
+            const cfg = await getJellyfinConfig();
+            if (!cfg) {
+                return res.status(503).json({
+                    error: JELLYFIN_UNREACHABLE_MESSAGE,
+                    jellyfin: true,
+                });
+            }
+            const rawId = trackId.slice("jellyfin:".length);
+            const recentPlay = await prisma.play.findFirst({
+                where: {
+                    userId,
+                    trackId,
+                    playedAt: { gte: new Date(Date.now() - 30 * 1000) },
+                },
+                orderBy: { playedAt: "desc" },
+            });
+            if (!recentPlay) {
+                await prisma.play.create({
+                    data: { userId, trackId },
+                });
+            }
+            const streamUrl = await getJellyfinStreamUrl(cfg, rawId);
+            return res.redirect(302, streamUrl);
+        }
+
         const track = await prisma.track.findUnique({
-            where: { id: req.params.id },
+            where: { id: trackId },
         });
 
         if (!track) {
@@ -2485,8 +2619,16 @@ router.get("/tracks/:id/stream", async (req, res) => {
 // GET /library/tracks/:id
 router.get("/tracks/:id", async (req, res) => {
     try {
+        const id = req.params.id;
+        if (id.startsWith("jellyfin:")) {
+            const track = await resolveTrackReference(id);
+            if (!track) {
+                return res.status(404).json({ error: "Track not found" });
+            }
+            return res.json(track);
+        }
         const track = await prisma.track.findUnique({
-            where: { id: req.params.id },
+            where: { id },
             include: {
                 album: {
                     include: {
@@ -2525,6 +2667,67 @@ router.get("/tracks/:id", async (req, res) => {
     } catch (error) {
         logger.error("Get track error:", error);
         res.status(500).json({ error: "Failed to fetch track" });
+    }
+});
+
+// GET /library/favorites - Jellyfin favorites (live view)
+router.get("/favorites", async (req, res) => {
+    try {
+        const cfg = await getJellyfinConfig();
+        if (!cfg) {
+            return res.status(503).json({
+                error: JELLYFIN_UNREACHABLE_MESSAGE,
+                jellyfin: true,
+            });
+        }
+        const tracks = await getJellyfinFavorites(cfg);
+        return res.json({ tracks });
+    } catch (err: any) {
+        logger.warn("[Library] Jellyfin favorites error:", err?.message);
+        return res.status(503).json({
+            error: JELLYFIN_UNREACHABLE_MESSAGE,
+            jellyfin: true,
+        });
+    }
+});
+
+// POST /library/favorites/:trackId - Add Jellyfin favorite
+router.post("/favorites/:trackId", async (req, res) => {
+    try {
+        const trackId = req.params.trackId;
+        if (!trackId.startsWith("jellyfin:")) {
+            return res.status(400).json({ error: "Only Jellyfin tracks can be favorited here." });
+        }
+        const cfg = await getJellyfinConfig();
+        if (!cfg) {
+            return res.status(503).json({ error: JELLYFIN_UNREACHABLE_MESSAGE, jellyfin: true });
+        }
+        const rawId = trackId.slice("jellyfin:".length);
+        await addJellyfinFavorite(cfg, rawId);
+        return res.json({ success: true, favorited: true });
+    } catch (err: any) {
+        logger.warn("[Library] Jellyfin add favorite error:", err?.message);
+        return res.status(503).json({ error: JELLYFIN_UNREACHABLE_MESSAGE, jellyfin: true });
+    }
+});
+
+// DELETE /library/favorites/:trackId - Remove Jellyfin favorite
+router.delete("/favorites/:trackId", async (req, res) => {
+    try {
+        const trackId = req.params.trackId;
+        if (!trackId.startsWith("jellyfin:")) {
+            return res.status(400).json({ error: "Only Jellyfin tracks can be unfavorited here." });
+        }
+        const cfg = await getJellyfinConfig();
+        if (!cfg) {
+            return res.status(503).json({ error: JELLYFIN_UNREACHABLE_MESSAGE, jellyfin: true });
+        }
+        const rawId = trackId.slice("jellyfin:".length);
+        await removeJellyfinFavorite(cfg, rawId);
+        return res.json({ success: true, favorited: false });
+    } catch (err: any) {
+        logger.warn("[Library] Jellyfin remove favorite error:", err?.message);
+        return res.status(503).json({ error: JELLYFIN_UNREACHABLE_MESSAGE, jellyfin: true });
     }
 });
 

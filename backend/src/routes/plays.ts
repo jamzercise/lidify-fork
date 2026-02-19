@@ -3,6 +3,7 @@ import { logger } from "../utils/logger";
 import { requireAuth } from "../middleware/auth";
 import { prisma } from "../utils/db";
 import { z } from "zod";
+import { resolveTrackReference } from "../services/jellyfin";
 
 const router = Router();
 
@@ -18,13 +19,18 @@ router.post("/", async (req, res) => {
         const userId = req.session.userId!;
         const { trackId } = playSchema.parse(req.body);
 
-        // Verify track exists
-        const track = await prisma.track.findUnique({
-            where: { id: trackId },
-        });
-
-        if (!track) {
-            return res.status(404).json({ error: "Track not found" });
+        if (!trackId.startsWith("jellyfin:")) {
+            const track = await prisma.track.findUnique({
+                where: { id: trackId },
+            });
+            if (!track) {
+                return res.status(404).json({ error: "Track not found" });
+            }
+        } else {
+            const resolved = await resolveTrackReference(trackId);
+            if (!resolved) {
+                return res.status(404).json({ error: "Track not found" });
+            }
         }
 
         const play = await prisma.play.create({
@@ -60,23 +66,6 @@ router.get("/", async (req, res) => {
             where: { userId },
             orderBy: { playedAt: "desc" },
             take,
-            include: {
-                track: {
-                    include: {
-                        album: {
-                            include: {
-                                artist: {
-                                    select: {
-                                        id: true,
-                                        name: true,
-                                        mbid: true,
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
         });
 
         res.json(plays);

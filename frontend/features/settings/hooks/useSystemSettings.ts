@@ -16,6 +16,9 @@ const defaultSystemSettings: SystemSettings = {
     audiobookshelfEnabled: false,
     audiobookshelfUrl: "http://localhost:13378",
     audiobookshelfApiKey: "",
+    jellyfinEnabled: false,
+    jellyfinUrl: "",
+    jellyfinApiKey: "",
     soulseekUsername: "",
     soulseekPassword: "",
     spotifyClientId: "",
@@ -177,6 +180,12 @@ export function useSystemSettings() {
                     result = await api.testAudiobookshelf(
                         systemSettings.audiobookshelfUrl,
                         systemSettings.audiobookshelfApiKey
+                    );
+                    break;
+                case "jellyfin":
+                    result = await api.testJellyfin(
+                        systemSettings.jellyfinUrl ?? undefined,
+                        systemSettings.jellyfinApiKey ?? undefined
                     );
                     break;
                 case "soulseek":

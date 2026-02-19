@@ -4,6 +4,8 @@ This document is a **to-do list for implementing Jellyfin as the music library b
 
 **Implementation plan:** For a file-level plan (what to change where, in what order, and how to avoid conflicts), see [lidifin-implementation-plan.md](./lidifin-implementation-plan.md).
 
+**Post-implementation checklist:** After building, use [lidifin-post-implementation-checklist.md](./lidifin-post-implementation-checklist.md) to verify all updates, cross-check integration, and ensure Docker/env/docs are updated.
+
 **Decisions (from feasibility doc):** Lidifin is **new installs only**—no migration of existing Lidify users or native library/playlists.
 
 **Phases (from feasibility doc):**  

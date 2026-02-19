@@ -4,7 +4,10 @@ import { requireAuth, requireAdmin } from "../middleware/auth";
 import { prisma } from "../utils/db";
 import { z } from "zod";
 import { writeEnvFile } from "../utils/envWriter";
-import { invalidateSystemSettingsCache } from "../utils/systemSettings";
+import {
+    invalidateSystemSettingsCache,
+    getSystemSettings,
+} from "../utils/systemSettings";
 import { queueCleaner } from "../jobs/queueCleaner";
 import { encrypt, decrypt } from "../utils/encryption";
 
@@ -49,6 +52,11 @@ const systemSettingsSchema = z.object({
     audiobookshelfEnabled: z.boolean().optional(),
     audiobookshelfUrl: z.string().optional(),
     audiobookshelfApiKey: z.string().nullable().optional(),
+
+    // Jellyfin (Lidifin - music library and streaming)
+    jellyfinEnabled: z.boolean().optional(),
+    jellyfinUrl: z.string().nullable().optional(),
+    jellyfinApiKey: z.string().nullable().optional(),
 
     // Soulseek (direct connection via slsk-client)
     soulseekUsername: z.string().nullable().optional(),
@@ -109,6 +117,10 @@ router.get("/", async (req, res) => {
 
         // Decrypt sensitive fields before sending to client
         // Use safeDecrypt to handle corrupted encrypted values gracefully
+        // Jellyfin: env overrides DB; do not send raw API key; send flag when from env
+        const jellyfinApiKeyFromEnv =
+            process.env.JELLYFIN_API_KEY != null &&
+            process.env.JELLYFIN_API_KEY !== "";
         const decryptedSettings = {
             ...settings,
             lidarrApiKey: safeDecrypt(settings.lidarrApiKey),
@@ -119,6 +131,10 @@ router.get("/", async (req, res) => {
             audiobookshelfApiKey: safeDecrypt(settings.audiobookshelfApiKey),
             soulseekPassword: safeDecrypt(settings.soulseekPassword),
             spotifyClientSecret: safeDecrypt(settings.spotifyClientSecret),
+            jellyfinApiKey: jellyfinApiKeyFromEnv
+                ? undefined
+                : safeDecrypt(settings.jellyfinApiKey),
+            jellyfinApiKeyFromEnv: jellyfinApiKeyFromEnv || undefined,
         };
 
         res.json(decryptedSettings);
@@ -164,6 +180,8 @@ router.post("/", async (req, res) => {
             encryptedData.spotifyClientSecret = encrypt(
                 data.spotifyClientSecret
             );
+        if (data.jellyfinApiKey != null)
+            encryptedData.jellyfinApiKey = encrypt(data.jellyfinApiKey);
 
         const settings = await prisma.systemSettings.upsert({
             where: { id: "default" },
@@ -622,6 +640,35 @@ router.post("/test-audiobookshelf", async (req, res) => {
                 details: error.response?.data || error.message,
             });
         }
+    }
+});
+
+// Test Jellyfin connection (Lidifin)
+router.post("/test-jellyfin", async (req, res) => {
+    try {
+        let { url, apiKey } = req.body || {};
+        if (!url || !apiKey) {
+            const settings = await getSystemSettings();
+            url = url || settings?.jellyfinUrl;
+            apiKey = apiKey || settings?.jellyfinApiKey;
+        }
+        if (!url || !apiKey) {
+            return res
+                .status(400)
+                .json({ error: "Jellyfin URL and API key are required" });
+        }
+        const { testJellyfinConnection } = await import("../services/jellyfin");
+        const result = await testJellyfinConnection(url, apiKey);
+        if (result.ok) {
+            return res.json({ success: true, message: "Jellyfin connection successful" });
+        }
+        return res.status(400).json({ error: result.error || "Connection failed" });
+    } catch (error: any) {
+        logger.error("Jellyfin test error:", error?.message);
+        return res.status(500).json({
+            error: "Failed to connect to Jellyfin",
+            details: error?.message,
+        });
     }
 });
 

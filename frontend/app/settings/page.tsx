@@ -19,6 +19,7 @@ import { PlaybackSection } from "@/features/settings/components/sections/Playbac
 import { DownloadPreferencesSection } from "@/features/settings/components/sections/DownloadPreferencesSection";
 import { LidarrSection } from "@/features/settings/components/sections/LidarrSection";
 import { AudiobookshelfSection } from "@/features/settings/components/sections/AudiobookshelfSection";
+import { JellyfinSection } from "@/features/settings/components/sections/JellyfinSection";
 import { SoulseekSection } from "@/features/settings/components/sections/SoulseekSection";
 import { AIServicesSection } from "@/features/settings/components/sections/AIServicesSection";
 import { StoragePathsSection } from "@/features/settings/components/sections/StoragePathsSection";
@@ -32,6 +33,7 @@ const sidebarItems: SidebarItem[] = [
     { id: "download-preferences", label: "Download Preferences", adminOnly: true },
     { id: "lidarr", label: "Download Services", adminOnly: true },
     { id: "audiobookshelf", label: "Media Servers", adminOnly: true },
+    { id: "jellyfin", label: "Jellyfin (Music)", adminOnly: true },
     { id: "soulseek", label: "P2P Networks", adminOnly: true },
     { id: "ai-services", label: "Artwork", adminOnly: true },
     { id: "storage", label: "Storage", adminOnly: true },
@@ -172,6 +174,14 @@ export default function SettingsPage() {
                             onUpdate={updateSystemSettings}
                             onTest={handleTestService}
                             isTesting={testingServices.audiobookshelf || false}
+                        />
+
+                        {/* Jellyfin (Music) - Lidifin */}
+                        <JellyfinSection
+                            settings={systemSettings}
+                            onUpdate={updateSystemSettings}
+                            onTest={handleTestService}
+                            isTesting={testingServices.jellyfin || false}
                         />
 
                         {/* P2P Networks - Soulseek */}

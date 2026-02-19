@@ -73,6 +73,11 @@ export async function getSystemSettings(forceRefresh = false) {
             settings.soulseekPassword,
             "soulseekPassword",
         ),
+        jellyfinApiKey:
+            process.env.JELLYFIN_API_KEY != null &&
+            process.env.JELLYFIN_API_KEY !== ""
+                ? process.env.JELLYFIN_API_KEY
+                : safeDecrypt(settings.jellyfinApiKey, "jellyfinApiKey"),
     };
 
     cachedSettings = decrypted;

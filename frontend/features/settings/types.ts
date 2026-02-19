@@ -28,6 +28,11 @@ export interface SystemSettings {
     audiobookshelfEnabled: boolean;
     audiobookshelfUrl: string;
     audiobookshelfApiKey: string;
+    // Jellyfin (Lidifin - music library and streaming)
+    jellyfinEnabled?: boolean;
+    jellyfinUrl?: string | null;
+    jellyfinApiKey?: string | null;
+    jellyfinApiKeyFromEnv?: boolean;
     // Soulseek (direct connection via slsk-client)
     soulseekUsername: string;
     soulseekPassword: string;
