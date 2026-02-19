@@ -35,6 +35,12 @@ const soulseekConfigSchema = z.object({
     enabled: z.boolean(),
 });
 
+const jellyfinConfigSchema = z.object({
+    url: z.string().url().optional().or(z.literal("")),
+    apiKey: z.string().optional().or(z.literal("")),
+    enabled: z.boolean(),
+});
+
 const enrichmentConfigSchema = z.object({
     enabled: z.boolean(),
 });
@@ -369,6 +375,59 @@ router.post("/soulseek", requireAuth, requireAdmin, async (req, res) => {
                 .json({ error: "Invalid request", details: err.errors });
         }
         logger.error("Soulseek config error:", err);
+        res.status(500).json({ error: "Failed to save configuration" });
+    }
+});
+
+/**
+ * POST /onboarding/jellyfin
+ * Step 2d: Configure Jellyfin (Lidifin - music library and streaming)
+ */
+router.post("/jellyfin", requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const config = jellyfinConfigSchema.parse(req.body);
+
+        if (!config.enabled) {
+            await prisma.systemSettings.upsert({
+                where: { id: "default" },
+                create: {
+                    id: "default",
+                    jellyfinEnabled: false,
+                    jellyfinUrl: null,
+                    jellyfinApiKey: null,
+                },
+                update: {
+                    jellyfinEnabled: false,
+                    jellyfinUrl: null,
+                    jellyfinApiKey: null,
+                },
+            });
+            return res.json({ success: true, tested: false });
+        }
+
+        await prisma.systemSettings.upsert({
+            where: { id: "default" },
+            create: {
+                id: "default",
+                jellyfinEnabled: true,
+                jellyfinUrl: (config.url || "").trim() || null,
+                jellyfinApiKey: config.apiKey ? encryptField(config.apiKey) : null,
+            },
+            update: {
+                jellyfinEnabled: true,
+                jellyfinUrl: (config.url || "").trim() || null,
+                jellyfinApiKey: config.apiKey ? encryptField(config.apiKey) : null,
+            },
+        });
+
+        res.json({ success: true, tested: true });
+    } catch (err: any) {
+        if (err instanceof z.ZodError) {
+            return res
+                .status(400)
+                .json({ error: "Invalid request", details: err.errors });
+        }
+        logger.error("Jellyfin config error:", err);
         res.status(500).json({ error: "Failed to save configuration" });
     }
 });

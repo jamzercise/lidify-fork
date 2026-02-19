@@ -4,7 +4,15 @@ import { z } from "zod";
 import { requireAuthOrToken } from "../middleware/auth";
 import { prisma } from "../utils/db";
 import { sessionLog } from "../utils/playlistLogger";
-import { resolveTrackReference, resolveTrackReferences } from "../services/jellyfin";
+import {
+    getJellyfinConfig,
+    resolveTrackReference,
+    resolveTrackReferences,
+    createJellyfinPlaylist,
+    addToJellyfinPlaylist,
+    setJellyfinPlaylistItems,
+    removeItemFromJellyfinPlaylistByItemId,
+} from "../services/jellyfin";
 
 const router = Router();
 
@@ -99,6 +107,20 @@ router.post("/", async (req, res) => {
                 isPublic: data.isPublic,
             },
         });
+
+        // Lidifin: push to Jellyfin when enabled so playlist appears there too
+        const cfg = await getJellyfinConfig();
+        if (cfg) {
+            const jellyfinPlaylistId = await createJellyfinPlaylist(cfg, data.name, []);
+            if (jellyfinPlaylistId) {
+                await prisma.playlist.update({
+                    where: { id: playlist.id },
+                    data: { jellyfinPlaylistId },
+                });
+                (playlist as { jellyfinPlaylistId?: string }).jellyfinPlaylistId =
+                    jellyfinPlaylistId;
+            }
+        }
 
         res.json(playlist);
     } catch (error) {
@@ -422,6 +444,24 @@ router.post("/:id/items", async (req, res) => {
             },
         });
 
+        // Lidifin: push new item to Jellyfin playlist when applicable
+        if (trackId.startsWith("jellyfin:")) {
+            const playlist = await prisma.playlist.findUnique({
+                where: { id: req.params.id },
+                select: { jellyfinPlaylistId: true },
+            });
+            if (playlist?.jellyfinPlaylistId) {
+                const cfg = await getJellyfinConfig();
+                if (cfg) {
+                    addToJellyfinPlaylist(
+                        cfg,
+                        playlist.jellyfinPlaylistId,
+                        [trackId.slice("jellyfin:".length)]
+                    ).catch(() => {});
+                }
+            }
+        }
+
         const resolvedTrack = await resolveTrackReference(trackId);
         res.json({
             ...item,
@@ -467,11 +507,23 @@ router.delete("/:id/items/:trackId", async (req, res) => {
             return res.status(403).json({ error: "Access denied" });
         }
 
+        const trackId = req.params.trackId;
+        if (trackId.startsWith("jellyfin:") && playlist.jellyfinPlaylistId) {
+            const cfg = await getJellyfinConfig();
+            if (cfg) {
+                removeItemFromJellyfinPlaylistByItemId(
+                    cfg,
+                    playlist.jellyfinPlaylistId,
+                    trackId.slice("jellyfin:".length)
+                ).catch(() => {});
+            }
+        }
+
         await prisma.playlistItem.delete({
             where: {
                 playlistId_trackId: {
                     playlistId: req.params.id,
-                    trackId: req.params.trackId,
+                    trackId,
                 },
             },
         });
@@ -520,6 +572,23 @@ router.put("/:id/items/reorder", async (req, res) => {
         );
 
         await prisma.$transaction(updates);
+
+        // Lidifin: sync new order to Jellyfin (only Jellyfin-track ids)
+        const playlist = await prisma.playlist.findUnique({
+            where: { id: req.params.id },
+            select: { jellyfinPlaylistId: true },
+        });
+        if (playlist?.jellyfinPlaylistId) {
+            const cfg = await getJellyfinConfig();
+            if (cfg) {
+                const jellyfinIds = trackIds
+                    .filter((id) => id.startsWith("jellyfin:"))
+                    .map((id) => id.slice("jellyfin:".length));
+                setJellyfinPlaylistItems(cfg, playlist.jellyfinPlaylistId, jellyfinIds).catch(
+                    () => {}
+                );
+            }
+        }
 
         res.json({ message: "Playlist reordered" });
     } catch (error) {

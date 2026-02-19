@@ -15,7 +15,7 @@ const envSchema = z.object({
         .min(32, "SESSION_SECRET must be at least 32 characters"),
     PORT: z.string().optional(),
     NODE_ENV: z.enum(["development", "production", "test"]).optional(),
-    MUSIC_PATH: z.string().min(1, "MUSIC_PATH is required"),
+    MUSIC_PATH: z.string().optional(), // Optional when Jellyfin is music source (Lidifin)
 });
 
 try {
@@ -36,7 +36,7 @@ try {
 
 // Music config - will be initialized async
 let musicConfig: MusicConfig = {
-    musicPath: process.env.MUSIC_PATH || "/music",
+    musicPath: process.env.MUSIC_PATH ?? "/music",
     transcodeCachePath:
         process.env.TRANSCODE_CACHE_PATH || "./cache/transcodes",
     transcodeCacheMaxGb: parseInt(

@@ -432,6 +432,148 @@ export async function resolveTrackReferences(
     return result;
 }
 
+// --- Playlists (Lidifin sync) ---
+
+/** Get Jellyfin current user id (for playlist creation). Returns null if API key doesn't support /Users/Me. */
+export async function getJellyfinUserId(cfg: JellyfinConfig): Promise<string | null> {
+    const client = createClient(cfg.url, cfg.apiKey);
+    try {
+        const res = await client.get<{ Id: string }>("/Users/Me");
+        return res.data?.Id ?? null;
+    } catch (err: any) {
+        logger.warn("[Jellyfin] getUserId failed:", err.message);
+        return null;
+    }
+}
+
+/**
+ * Create a playlist in Jellyfin. Returns the Jellyfin playlist id or null on failure.
+ * itemIds: raw Jellyfin item ids (no jellyfin: prefix).
+ */
+export async function createJellyfinPlaylist(
+    cfg: JellyfinConfig,
+    name: string,
+    itemIds: string[] = []
+): Promise<string | null> {
+    const userId = await getJellyfinUserId(cfg);
+    if (!userId) return null;
+    const client = createClient(cfg.url, cfg.apiKey);
+    try {
+        const res = await client.post<{ Id: string }>("/Playlists", {
+            Name: name,
+            Ids: itemIds,
+            UserId: userId,
+            MediaType: "Audio",
+        });
+        return res.data?.Id ?? null;
+    } catch (err: any) {
+        logger.warn("[Jellyfin] createPlaylist failed:", name, err.message);
+        return null;
+    }
+}
+
+/**
+ * Add items to a Jellyfin playlist. itemIds are raw Jellyfin ids.
+ */
+export async function addToJellyfinPlaylist(
+    cfg: JellyfinConfig,
+    playlistId: string,
+    itemIds: string[]
+): Promise<boolean> {
+    if (itemIds.length === 0) return true;
+    const userId = await getJellyfinUserId(cfg);
+    if (!userId) return false;
+    const client = createClient(cfg.url, cfg.apiKey);
+    try {
+        await client.post(`/Playlists/${playlistId}/Items`, null, {
+            params: { Ids: itemIds.join(","), UserId: userId },
+        });
+        return true;
+    } catch (err: any) {
+        logger.warn("[Jellyfin] addToPlaylist failed:", playlistId, err.message);
+        return false;
+    }
+}
+
+/**
+ * Remove items from a Jellyfin playlist by entry ids.
+ * Get entry ids from GET /Playlists/{id}/Items response (each item has Id = entry id).
+ */
+export async function removeFromJellyfinPlaylist(
+    cfg: JellyfinConfig,
+    playlistId: string,
+    entryIds: string[]
+): Promise<boolean> {
+    if (entryIds.length === 0) return true;
+    const client = createClient(cfg.url, cfg.apiKey);
+    try {
+        await client.delete(`/Playlists/${playlistId}/Items`, {
+            data: { EntryIds: entryIds },
+        });
+        return true;
+    } catch (err: any) {
+        logger.warn("[Jellyfin] removeFromPlaylist failed:", playlistId, err.message);
+        return false;
+    }
+}
+
+/**
+ * Get playlist items from Jellyfin to obtain entry ids (for remove/reorder).
+ * Returns array of { entryId, itemId } where itemId is the audio item id.
+ */
+export async function getJellyfinPlaylistItems(
+    cfg: JellyfinConfig,
+    playlistId: string
+): Promise<{ entryId: string; itemId: string }[]> {
+    const client = createClient(cfg.url, cfg.apiKey);
+    try {
+        const res = await client.get<{ Items?: { Id: string; PlaylistItemId?: string }[] }>(
+            `/Playlists/${playlistId}/Items`,
+            { params: { UserId: (await getJellyfinUserId(cfg)) ?? "" } }
+        );
+        const items = res.data?.Items ?? [];
+        return items.map((it) => ({
+            entryId: it.PlaylistItemId ?? it.Id,
+            itemId: it.Id,
+        }));
+    } catch (err: any) {
+        logger.warn("[Jellyfin] getPlaylistItems failed:", playlistId, err.message);
+        return [];
+    }
+}
+
+/**
+ * Replace all items in a Jellyfin playlist with the given order (raw Jellyfin item ids).
+ * Clears existing items then adds new ones. Best-effort; returns true if add succeeded.
+ */
+export async function setJellyfinPlaylistItems(
+    cfg: JellyfinConfig,
+    playlistId: string,
+    itemIds: string[]
+): Promise<boolean> {
+    const existing = await getJellyfinPlaylistItems(cfg, playlistId);
+    const entryIds = existing.map((e) => e.entryId).filter(Boolean);
+    if (entryIds.length > 0) {
+        await removeFromJellyfinPlaylist(cfg, playlistId, entryIds);
+    }
+    if (itemIds.length === 0) return true;
+    return addToJellyfinPlaylist(cfg, playlistId, itemIds);
+}
+
+/**
+ * Remove one item from a Jellyfin playlist by its Jellyfin item id (e.g. from jellyfin:xxx).
+ */
+export async function removeItemFromJellyfinPlaylistByItemId(
+    cfg: JellyfinConfig,
+    playlistId: string,
+    jellyfinItemId: string
+): Promise<boolean> {
+    const items = await getJellyfinPlaylistItems(cfg, playlistId);
+    const entry = items.find((e) => e.itemId === jellyfinItemId);
+    if (!entry) return true; // already not in playlist
+    return removeFromJellyfinPlaylist(cfg, playlistId, [entry.entryId]);
+}
+
 // --- Favorites ---
 
 export async function addJellyfinFavorite(cfg: JellyfinConfig, itemId: string): Promise<void> {

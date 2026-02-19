@@ -53,6 +53,18 @@ Thanks for your patience while I work through this.
   <img src="assets/screenshots/desktop-library.png" alt="Library View" width="800">
 </p>
 
+### Lidifin (Jellyfin as music source)
+
+When you use [Jellyfin](https://jellyfin.org/) for media, you can use it as Lidify’s **music library** instead of (or alongside) a local folder. This is called **Lidifin**.
+
+-   **Jellyfin as library** – Artists, albums, and tracks come from Jellyfin; no local music path required
+-   **Streaming** – Playback streams from Jellyfin via redirect; no need to mount Jellyfin media in Lidify
+-   **Favorites** – Heart icon on Jellyfin tracks; Favorites page shows your Jellyfin favorites
+-   **Playlists** – Playlists you create in Lidify are synced to Jellyfin when possible
+-   **Test connection** – Settings and onboarding include a “Test connection” check for your Jellyfin URL and API key
+
+Configure Jellyfin in **Settings → Jellyfin (Music)** or during onboarding. When Jellyfin is enabled as the music source, `MUSIC_PATH` is optional (e.g. used only as a download destination). Your client must be able to reach the Jellyfin server for streaming.
+
 ### Discovery and Playlists
 
 -   **Made For You mixes** - Programmatically generated playlists based on your library:
@@ -404,7 +416,7 @@ The unified Lidify container handles most configuration automatically. Here are 
 | `LOG_LEVEL`                         | `warn` (prod) / `debug` (dev)      | Logging verbosity: debug, info, warn, error, silent                         |
 | `DOCS_PUBLIC`                       | `false`                            | Set to `true` to allow public access to API docs in production              |
 
-The music library path is configured via Docker volume mount (`-v /path/to/music:/music`).
+The music library path is configured via Docker volume mount (`-v /path/to/music:/music`). If you use **Lidifin** (Jellyfin as music source), `MUSIC_PATH` is optional and can be unset or used only as a download destination; see [Jellyfin (Lidifin)](#jellyfin-lidifin).
 
 #### External Access
 
@@ -643,6 +655,27 @@ Connect to your Audiobookshelf instance to browse and listen to audiobooks withi
 3. Enter your Audiobookshelf URL (e.g., `http://localhost:13378`)
 4. Enter your API key (found in Audiobookshelf under Settings > Users > your user > API Token)
 5. Test the connection and save
+
+### Jellyfin (Lidifin)
+
+Use a Jellyfin server as your **music library** so Lidify streams from Jellyfin instead of a local folder (Lidifin mode).
+
+**What you get:**
+
+-   Library (artists, albums, tracks) and streaming from Jellyfin
+-   Favorites synced with Jellyfin; heart icon on tracks and a Favorites page
+-   Playlists created in Lidify synced to Jellyfin when possible
+-   No local music path required when Jellyfin is the only source
+
+**Setup:**
+
+1. In Jellyfin: create an API key (Dashboard → API Keys) for the user that will own the library.
+2. In Lidify: go to Settings → Jellyfin (Music), or complete the Jellyfin step during onboarding.
+3. Enter your Jellyfin URL (e.g. `http://localhost:8096` or your public URL).
+4. Enter the API key and use **Test connection** to verify.
+5. Enable “Use Jellyfin for music” and save.
+
+**Optional:** Set `JELLYFIN_API_KEY` in your environment (e.g. in Docker) to override the stored API key. The client (browser/app) must be able to reach the Jellyfin URL for playback.
 
 ### Soulseek
 

@@ -168,6 +168,19 @@ export async function processScan(
         spotifyImportJobId,
     } = job.data;
 
+    // When Jellyfin is the music source (Lidifin), native library scan is not used
+    const { isJellyfinMusicSource } = await import("../../services/jellyfin");
+    if (await isJellyfinMusicSource()) {
+        logger.debug(`[ScanJob ${job.id}] Jellyfin is music source; skipping native scan`);
+        return {
+            tracksAdded: 0,
+            tracksUpdated: 0,
+            tracksRemoved: 0,
+            errors: [],
+            duration: 0,
+        };
+    }
+
     logger.debug(`\n═══════════════════════════════════════════════`);
     logger.debug(`[ScanJob ${job.id}] Starting library scan for user ${userId}`);
     if (source) {

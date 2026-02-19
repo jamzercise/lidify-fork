@@ -15,6 +15,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLibraryActions } from "@/features/library/hooks/useLibraryActions";
+import { useFavorites } from "@/hooks/useFavorites";
 import { LibraryHeader } from "@/features/library/components/LibraryHeader";
 import { LibraryTabs } from "@/features/library/components/LibraryTabs";
 import { ArtistsGrid } from "@/features/library/components/ArtistsGrid";
@@ -170,6 +171,14 @@ export default function LibraryPage() {
         deleteAlbum,
         deleteTrack,
     } = useLibraryActions();
+    const { favoriteIds, addFavorite, removeFavorite } = useFavorites();
+    const handleToggleFavorite = useCallback(
+        (trackId: string, isFavorite: boolean) => {
+            if (isFavorite) removeFavorite(trackId);
+            else addFavorite(trackId);
+        },
+        [addFavorite, removeFavorite],
+    );
 
     // Reset page and filter when tab changes
     useEffect(() => {
@@ -464,6 +473,8 @@ export default function LibraryPage() {
                         onAddToQueue={addTrackToQueue}
                         onAddToPlaylist={addTrackToPlaylist}
                         onDelete={handleDeleteTrack}
+                        favoriteIds={favoriteIds}
+                        onToggleFavorite={handleToggleFavorite}
                     />
                 )}
 

@@ -23,45 +23,58 @@ export async function validateMusicConfig(): Promise<MusicConfig> {
     // Env var takes precedence to support Docker deployments where mount point is fixed
     let musicPath = process.env.MUSIC_PATH || settings?.musicPath || "/music";
 
-    // Docker safety: If configured path doesn't exist but /music does, use /music
-    // This handles users passing host .env files to Docker with host paths
-    const isDocker = fs.existsSync('/.dockerenv');
-    if (isDocker && !fs.existsSync(musicPath) && fs.existsSync('/music')) {
-        logger.warn(`MUSIC_PATH=${musicPath} not found in container, using /music (Docker mount point)`);
-        musicPath = '/music';
-    }
+    // When Jellyfin is the music source (Lidifin), MUSIC_PATH is optional (e.g. used only for downloads)
+    const jellyfinIsSource = !!settings?.jellyfinEnabled;
+    if (jellyfinIsSource && (!musicPath.trim() || !fs.existsSync(musicPath))) {
+        musicPath = "/music";
+        logger.info(
+            "Jellyfin is music source: MUSIC_PATH not set or invalid, using default. Set MUSIC_PATH for download destination if needed."
+        );
+    } else {
+        // Docker safety: If configured path doesn't exist but /music does, use /music
+        const isDocker = fs.existsSync("/.dockerenv");
+        if (isDocker && !fs.existsSync(musicPath) && fs.existsSync("/music")) {
+            logger.warn(
+                `MUSIC_PATH=${musicPath} not found in container, using /music (Docker mount point)`
+            );
+            musicPath = "/music";
+        }
 
-    // Log if database has a different path than what we're using (helps debug migrations)
-    if (settings?.musicPath && settings.musicPath !== musicPath) {
-        logger.debug(`Database has musicPath=${settings.musicPath}, using ${musicPath} from env/default`);
-    }
+        // Log if database has a different path than what we're using (helps debug migrations)
+        if (settings?.musicPath && settings.musicPath !== musicPath) {
+            logger.debug(
+                `Database has musicPath=${settings.musicPath}, using ${musicPath} from env/default`
+            );
+        }
 
-    // VALIDATE MUSIC PATH EXISTS
-    if (!fs.existsSync(musicPath)) {
-        const isDocker = fs.existsSync('/.dockerenv') || process.env.NODE_ENV === 'production';
-        const guidance = isDocker
-            ? `Docker users: Ensure your volume mount is correct in docker-compose.yml:
+        // VALIDATE MUSIC PATH EXISTS (skip when Jellyfin is source and path was overridden above)
+        if (!fs.existsSync(musicPath)) {
+            const isDocker =
+                fs.existsSync("/.dockerenv") || process.env.NODE_ENV === "production";
+            const guidance = isDocker
+                ? `Docker users: Ensure your volume mount is correct in docker-compose.yml:
    volumes:
      - /path/to/your/music:/music
    The container expects music at /music, not your host path.`
-            : `Check that MUSIC_PATH in your .env file points to an existing directory.`;
-        
-        throw new AppError(
-            ErrorCode.MUSIC_PATH_NOT_ACCESSIBLE,
-            ErrorCategory.FATAL,
-            `Music path does not exist: ${musicPath}\n\n${guidance}`
-        );
-    }
+                : `Check that MUSIC_PATH in your .env file points to an existing directory.`;
 
-    // VALIDATE MUSIC PATH IS READABLE
-    try {
-        fs.accessSync(musicPath, fs.constants.R_OK);
-    } catch {
-        throw new AppError(
-            ErrorCode.MUSIC_PATH_NOT_ACCESSIBLE,
-            ErrorCategory.FATAL,
-            `Music path not readable: ${musicPath}. Check file permissions.`
-        );
+            throw new AppError(
+                ErrorCode.MUSIC_PATH_NOT_ACCESSIBLE,
+                ErrorCategory.FATAL,
+                `Music path does not exist: ${musicPath}\n\n${guidance}`
+            );
+        }
+
+        // VALIDATE MUSIC PATH IS READABLE
+        try {
+            fs.accessSync(musicPath, fs.constants.R_OK);
+        } catch {
+            throw new AppError(
+                ErrorCode.MUSIC_PATH_NOT_ACCESSIBLE,
+                ErrorCategory.FATAL,
+                `Music path not readable: ${musicPath}. Check file permissions.`
+            );
+        }
     }
 
     // Get transcode cache path

@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { PlaylistSelector } from "@/components/ui/PlaylistSelector";
 import { GradientSpinner } from "@/components/ui/GradientSpinner";
 import { CachedImage } from "@/components/ui/CachedImage";
-import { AudioLines, ListPlus, Plus, Trash2, Play } from "lucide-react";
+import { AudioLines, Heart, ListPlus, Plus, Trash2, Play } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { formatTime } from "@/utils/formatTime";
 import { api } from "@/lib/api";
@@ -19,8 +19,12 @@ interface TracksListProps {
     onAddToPlaylist: (playlistId: string, trackId: string) => void;
     onDelete: (trackId: string, trackTitle: string) => void;
     isLoading?: boolean;
+    /** When set, show heart for Jellyfin tracks and call on toggle (add/remove favorite). */
+    favoriteIds?: Set<string>;
+    onToggleFavorite?: (trackId: string, isFavorite: boolean) => void;
+    /** Hide delete button (e.g. on Favorites page). */
+    hideDelete?: boolean;
 }
-
 
 interface TrackRowProps {
     track: Track;
@@ -30,6 +34,9 @@ interface TrackRowProps {
     onAddToQueue: (track: Track) => void;
     onShowAddToPlaylist: (trackId: string) => void;
     onDelete: (trackId: string, trackTitle: string) => void;
+    favoriteIds?: Set<string>;
+    onToggleFavorite?: (trackId: string, isFavorite: boolean) => void;
+    hideDelete?: boolean;
 }
 
 const TrackRow = memo(
@@ -41,7 +48,12 @@ const TrackRow = memo(
         onAddToQueue,
         onShowAddToPlaylist,
         onDelete,
+        favoriteIds,
+        onToggleFavorite,
+        hideDelete,
     }: TrackRowProps) {
+        const isJellyfin = track.id.startsWith("jellyfin:");
+        const isFavorite = favoriteIds?.has(track.id) ?? false;
         return (
             <div
                 key={track.id}
@@ -113,6 +125,25 @@ const TrackRow = memo(
 
                 {/* Actions + Duration */}
                 <div className="flex items-center gap-1">
+                    {isJellyfin && onToggleFavorite && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleFavorite(track.id, !isFavorite);
+                            }}
+                            className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity",
+                                isFavorite
+                                    ? "text-red-400 hover:text-red-300 hover:bg-white/10"
+                                    : "text-gray-400 hover:text-white hover:bg-white/10",
+                            )}
+                            title={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+                        >
+                            <Heart
+                                className={cn("w-4 h-4", isFavorite && "fill-current")}
+                            />
+                        </button>
+                    )}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -133,16 +164,18 @@ const TrackRow = memo(
                     >
                         <Plus className="w-4 h-4" />
                     </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(track.id, track.title);
-                        }}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Delete Track"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!hideDelete && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(track.id, track.title);
+                            }}
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Delete Track"
+                        >
+                            <Trash2 className="w-4 h-4" />
+                        </button>
+                    )}
                     <span className="text-xs text-gray-500 w-10 text-right">
                         {formatTime(track.duration)}
                     </span>
@@ -154,7 +187,10 @@ const TrackRow = memo(
         return (
             prevProps.track.id === nextProps.track.id &&
             prevProps.isCurrentlyPlaying === nextProps.isCurrentlyPlaying &&
-            prevProps.index === nextProps.index
+            prevProps.index === nextProps.index &&
+            prevProps.favoriteIds?.has(prevProps.track.id) ===
+                nextProps.favoriteIds?.has(nextProps.track.id) &&
+            prevProps.hideDelete === nextProps.hideDelete
         );
     },
 );
@@ -166,6 +202,9 @@ export function TracksList({
     onAddToPlaylist,
     onDelete,
     isLoading = false,
+    favoriteIds,
+    onToggleFavorite,
+    hideDelete,
 }: TracksListProps) {
     const { currentTrack } = useAudioState();
     const currentTrackId = currentTrack?.id;
@@ -228,6 +267,9 @@ export function TracksList({
                             onAddToQueue={onAddToQueue}
                             onShowAddToPlaylist={handleShowAddToPlaylist}
                             onDelete={onDelete}
+                            favoriteIds={favoriteIds}
+                            onToggleFavorite={onToggleFavorite}
+                            hideDelete={hideDelete}
                         />
                     );
                 })}

@@ -59,7 +59,11 @@ export default function OnboardingPage() {
         password: "",
         enabled: false,
     });
-
+    const [jellyfin, setJellyfin] = useState({
+        url: "",
+        apiKey: "",
+        enabled: false,
+    });
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -103,7 +107,7 @@ export default function OnboardingPage() {
     };
 
     const testConnection = async (
-        type: "lidarr" | "audiobookshelf" | "soulseek"
+        type: "lidarr" | "audiobookshelf" | "soulseek" | "jellyfin"
     ) => {
         setError("");
         setSuccess("");
@@ -134,6 +138,11 @@ export default function OnboardingPage() {
                     username: soulseek.username,
                     password: soulseek.password,
                 });
+            } else if (type === "jellyfin") {
+                if (!jellyfin.url || !jellyfin.apiKey) {
+                    throw new Error("URL and API key are required");
+                }
+                await api.testJellyfin(jellyfin.url, jellyfin.apiKey);
             }
             setSuccess(`${type} connected successfully!`);
         } catch (err: unknown) {
@@ -156,6 +165,7 @@ export default function OnboardingPage() {
                     api.post("/onboarding/lidarr", lidarr),
                     api.post("/onboarding/audiobookshelf", audiobookshelf),
                     api.post("/onboarding/soulseek", soulseek),
+                    api.post("/onboarding/jellyfin", jellyfin),
                 ]);
                 setStep(3);
             } else if (step === 3) {
@@ -501,6 +511,47 @@ export default function OnboardingPage() {
                                                 }
                                                 onTest={() =>
                                                     testConnection("soulseek")
+                                                }
+                                                loading={loading}
+                                            />
+
+                                            {/* Jellyfin (Lidifin - music library) */}
+                                            <IntegrationCard
+                                                title="Jellyfin (Music)"
+                                                description="Use Jellyfin as your music library and stream from it"
+                                                localPort="localhost:8096"
+                                                icon={
+                                                    <svg
+                                                        className="w-6 h-6"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+                                                        />
+                                                    </svg>
+                                                }
+                                                enabled={jellyfin.enabled}
+                                                onToggle={() =>
+                                                    setJellyfin({
+                                                        ...jellyfin,
+                                                        enabled: !jellyfin.enabled,
+                                                    })
+                                                }
+                                                url={jellyfin.url}
+                                                apiKey={jellyfin.apiKey}
+                                                onUrlChange={(url) =>
+                                                    setJellyfin({ ...jellyfin, url })
+                                                }
+                                                onApiKeyChange={(apiKey) =>
+                                                    setJellyfin({ ...jellyfin, apiKey })
+                                                }
+                                                onTest={() =>
+                                                    testConnection("jellyfin")
                                                 }
                                                 loading={loading}
                                             />
